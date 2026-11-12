@@ -1131,7 +1131,7 @@ private:
                 args.push_back(exts);
             }
         } else if (mode.find("dirb") != std::string::npos) {
-            args = {"dirb", web_url, wl};
+            args = {"dirb", web_url, wl, "-S", "-r"};
             if (!exts.empty()) {
                 args.push_back("-X");
                 args.push_back(exts);
@@ -1513,6 +1513,11 @@ private:
 
             // Filter out 250+ lines of '[host down]' clutter when --open is active
             if (line.find("[host down]") != std::string::npos && nmap_open_check.get_active()) {
+                continue;
+            }
+
+            // Filter out transient tester status lines from dirb
+            if (line.find("--> Testing:") != std::string::npos) {
                 continue;
             }
 
