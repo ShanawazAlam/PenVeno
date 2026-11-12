@@ -3,6 +3,8 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <map>
+#include <set>
 #include <sstream>
 #include <fstream>
 #include <thread>
@@ -164,6 +166,7 @@ public:
 
         load_custom_css();
         setup_ui();
+        init_console_tags();
         refresh_network_interfaces();
 
         // Connect Dispatcher for cross-thread GUI updates
@@ -192,6 +195,16 @@ private:
     Glib::Dispatcher process_finished_dispatcher;
     bool is_process_running{false};
     std::string current_task_name;
+
+    // Discovered Hosts & Ports state
+    struct ActiveHost {
+        std::string ip;
+        std::string hostname;
+        std::set<std::string> ports;
+    };
+    std::map<std::string, ActiveHost> live_hosts;
+    std::string current_scan_host;
+    Gtk::ComboBoxText active_hosts_combo;
 
     // UI Widgets
     Gtk::Box main_vbox{Gtk::ORIENTATION_VERTICAL, 0};
@@ -491,6 +504,22 @@ private:
         target_row->pack_start(nmap_profile_combo, Gtk::PACK_SHRINK);
         nmap_panel.pack_start(*target_row, Gtk::PACK_SHRINK);
 
+        // Active Discovered Hosts Quick-Select Row
+        Gtk::Box* active_hosts_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
+        Gtk::Label* act_lbl = Gtk::manage(new Gtk::Label("Discovered Live Targets:"));
+        active_hosts_combo.append("", "Select Live Target (Run a scan to populate)");
+        active_hosts_combo.set_active(0);
+        active_hosts_combo.signal_changed().connect([this]() {
+            std::string id = active_hosts_combo.get_active_id();
+            if (!id.empty()) {
+                nmap_target_entry.set_text(id);
+                update_nmap_command_preview();
+            }
+        });
+        active_hosts_row->pack_start(*act_lbl, Gtk::PACK_SHRINK);
+        active_hosts_row->pack_start(active_hosts_combo, Gtk::PACK_EXPAND_WIDGET);
+        nmap_panel.pack_start(*active_hosts_row, Gtk::PACK_SHRINK);
+
         // Port Scope Row
         Gtk::Box* port_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
         Gtk::Label* ps_lbl = Gtk::manage(new Gtk::Label("Port Selection Scope:"));
@@ -703,10 +732,12 @@ private:
 
         // Scan technique
         std::string st = nmap_scan_type_combo.get_active_text();
+        bool is_ping_sweep = (st.find("-sn") != std::string::npos);
+
         if (st.find("-sS") != std::string::npos) args.push_back("-sS");
         else if (st.find("-sT") != std::string::npos) args.push_back("-sT");
         else if (st.find("-sU") != std::string::npos) args.push_back("-sU");
-        else if (st.find("-sn") != std::string::npos) args.push_back("-sn");
+        else if (is_ping_sweep) args.push_back("-sn");
         else if (st.find("-sF") != std::string::npos) args.push_back("-sF");
         else if (st.find("-sN") != std::string::npos) args.push_back("-sN");
         else if (st.find("-sX") != std::string::npos) args.push_back("-sX");
@@ -720,8 +751,8 @@ private:
 
         if (nmap_pn_check.get_active()) args.push_back("-Pn");
 
-        // Port Scope (only if not ping sweep)
-        if (st.find("-sn") == std::string::npos) {
+        // Only add port options, detection, and scripts if NOT a ping sweep (-sn)
+        if (!is_ping_sweep) {
             std::string port_scope = nmap_port_scope_combo.get_active_text();
             if (port_scope.find("-F") != std::string::npos) {
                 args.push_back("-F");
@@ -742,33 +773,34 @@ private:
                     args.push_back(c);
                 }
             }
-        }
 
-        // Detection
-        if (nmap_sv_check.get_active()) args.push_back("-sV");
-        if (nmap_os_check.get_active()) args.push_back("-O");
-        if (nmap_agg_check.get_active()) args.push_back("-A");
-        if (nmap_traceroute_check.get_active()) args.push_back("--traceroute");
+            // Detection (Requires port scan; invalid with -sn)
+            if (nmap_sv_check.get_active()) args.push_back("-sV");
+            if (nmap_os_check.get_active()) args.push_back("-O");
+            if (nmap_agg_check.get_active()) args.push_back("-A");
 
-        // Scripts
-        std::vector<std::string> scripts;
-        if (nmap_sc_check.get_active()) scripts.push_back("default");
-        if (nmap_vuln_check.get_active()) scripts.push_back("vuln");
-        if (nmap_auth_check.get_active()) scripts.push_back("auth");
-        if (nmap_exploit_check.get_active()) scripts.push_back("exploit");
-        if (nmap_malware_check.get_active()) scripts.push_back("malware");
-        if (nmap_discovery_check.get_active()) scripts.push_back("discovery");
-        std::string cs = nmap_custom_script_entry.get_text();
-        if (!cs.empty()) scripts.push_back(cs);
+            // Scripts
+            std::vector<std::string> scripts;
+            if (nmap_sc_check.get_active()) scripts.push_back("default");
+            if (nmap_vuln_check.get_active()) scripts.push_back("vuln");
+            if (nmap_auth_check.get_active()) scripts.push_back("auth");
+            if (nmap_exploit_check.get_active()) scripts.push_back("exploit");
+            if (nmap_malware_check.get_active()) scripts.push_back("malware");
+            if (nmap_discovery_check.get_active()) scripts.push_back("discovery");
+            std::string cs = nmap_custom_script_entry.get_text();
+            if (!cs.empty()) scripts.push_back(cs);
 
-        if (!scripts.empty()) {
-            std::string script_arg = "--script=";
-            for (size_t i = 0; i < scripts.size(); ++i) {
-                script_arg += scripts[i];
-                if (i + 1 < scripts.size()) script_arg += ",";
+            if (!scripts.empty()) {
+                std::string script_arg = "--script=";
+                for (size_t i = 0; i < scripts.size(); ++i) {
+                    script_arg += scripts[i];
+                    if (i + 1 < scripts.size()) script_arg += ",";
+                }
+                args.push_back(script_arg);
             }
-            args.push_back(script_arg);
         }
+
+        if (nmap_traceroute_check.get_active()) args.push_back("--traceroute");
 
         // Timing
         std::string tm = nmap_timing_combo.get_active_text();
@@ -1174,9 +1206,112 @@ private:
         }
     }
 
+    void init_console_tags() {
+        auto tag_green = console_buffer->create_tag("tag_green");
+        tag_green->property_foreground() = "#a6e3a1"; // Green
+        tag_green->property_weight() = PANGO_WEIGHT_BOLD;
+
+        auto tag_cyan = console_buffer->create_tag("tag_cyan");
+        tag_cyan->property_foreground() = "#89b4fa"; // Cyan / Blue
+        tag_cyan->property_weight() = PANGO_WEIGHT_BOLD;
+
+        auto tag_yellow = console_buffer->create_tag("tag_yellow");
+        tag_yellow->property_foreground() = "#f9e2af"; // Amber / Yellow
+
+        auto tag_red = console_buffer->create_tag("tag_red");
+        tag_red->property_foreground() = "#f38ba8"; // Red
+        tag_red->property_weight() = PANGO_WEIGHT_BOLD;
+    }
+
+    void parse_nmap_line(const std::string& line) {
+        // Pattern 1: Discovered open port 80/tcp on 192.168.88.2
+        static const std::regex disc_regex(R"(Discovered open port (\S+) on (\S+))");
+        std::smatch match;
+        if (std::regex_search(line, match, disc_regex)) {
+            std::string port = match[1].str();
+            std::string ip = match[2].str();
+            live_hosts[ip].ip = ip;
+            live_hosts[ip].ports.insert(port);
+            return;
+        }
+
+        // Pattern 2: Nmap scan report for host (ip) or Nmap scan report for ip
+        static const std::regex rep_regex(R"(Nmap scan report for (?:([^\s()]+)\s+\(([^)]+)\)|([^\s()]+)))");
+        if (std::regex_search(line, match, rep_regex)) {
+            std::string host_or_ip = match[3].matched ? match[3].str() : match[2].str();
+            std::string name = match[1].matched ? match[1].str() : "";
+            if (line.find("[host down]") == std::string::npos) {
+                current_scan_host = host_or_ip;
+                live_hosts[host_or_ip].ip = host_or_ip;
+                if (!name.empty()) live_hosts[host_or_ip].hostname = name;
+            } else {
+                current_scan_host.clear();
+            }
+            return;
+        }
+
+        // Pattern 3: 80/tcp open http Apache...
+        static const std::regex port_regex(R"(^(\d+/(?:tcp|udp))\s+open\s+(\S+))");
+        if (!current_scan_host.empty() && std::regex_search(line, match, port_regex)) {
+            std::string port_svc = match[1].str() + " (" + match[2].str() + ")";
+            live_hosts[current_scan_host].ports.insert(port_svc);
+        }
+    }
+
     void append_console_output(const std::string& text) {
-        auto iter = console_buffer->end();
-        console_buffer->insert(iter, text);
+        std::istringstream stream(text);
+        std::string line;
+        while (std::getline(stream, line)) {
+            if (!line.empty() && line.back() == '\r') line.pop_back();
+
+            // Track discovered active hosts
+            parse_nmap_line(line);
+
+            // Filter out 250+ lines of '[host down]' clutter when --open is active
+            if (line.find("[host down]") != std::string::npos && nmap_open_check.get_active()) {
+                continue;
+            }
+
+            std::string tag_name;
+            if (line.find("open") != std::string::npos ||
+                line.find("Host is up") != std::string::npos ||
+                line.find("Discovered open port") != std::string::npos ||
+                line.find("[✓]") != std::string::npos ||
+                line.find("[+]") != std::string::npos) {
+                tag_name = "tag_green";
+            } else if (line.find("closed") != std::string::npos ||
+                       line.find("[host down]") != std::string::npos ||
+                       line.find("[!]") != std::string::npos ||
+                       line.find("QUITTING") != std::string::npos ||
+                       line.find("dropped") != std::string::npos) {
+                tag_name = "tag_red";
+            } else if (line.find("Stats:") != std::string::npos ||
+                       line.find("Timing:") != std::string::npos ||
+                       line.find("WARNING:") != std::string::npos ||
+                       line.find("CVE-") != std::string::npos ||
+                       line.find("vulners:") != std::string::npos) {
+                tag_name = "tag_yellow";
+            } else if (line.find("[▶]") != std::string::npos ||
+                       line.find("Starting Nmap") != std::string::npos ||
+                       line.find("PORT     STATE") != std::string::npos ||
+                       line.find("Nmap scan report") != std::string::npos ||
+                       line.find("NSE:") != std::string::npos) {
+                tag_name = "tag_cyan";
+            }
+
+            auto iter = console_buffer->end();
+            if (!tag_name.empty()) {
+                auto tag = console_buffer->get_tag_table()->lookup(tag_name);
+                if (tag) {
+                    console_buffer->insert_with_tag(iter, line + "\n", tag);
+                } else {
+                    console_buffer->insert(iter, line + "\n");
+                }
+            } else {
+                console_buffer->insert(iter, line + "\n");
+            }
+        }
+
         if (autoscroll_check.get_active()) {
             auto mark = console_buffer->create_mark(console_buffer->end());
             console_view.scroll_to(mark);
@@ -1205,6 +1340,41 @@ private:
         stop_button.set_sensitive(false);
         set_inputs_sensitive(true);
 
+        if (!live_hosts.empty()) {
+            std::ostringstream summary;
+            summary << "\n╔═════════════════════════════════════════════════════════════════════════════╗\n";
+            summary << "║               🎯 ACTIVE DEVICES & OPEN SERVICES DISCOVERED                  ║\n";
+            summary << "╚═════════════════════════════════════════════════════════════════════════════╝\n\n";
+
+            active_hosts_combo.remove_all();
+            active_hosts_combo.append("", "Select Live Target (" + std::to_string(live_hosts.size()) + " Found)");
+
+            for (const auto& [ip, host] : live_hosts) {
+                summary << "  [ 🟢 UP ] " << std::left << std::setw(16) << ip;
+                if (!host.hostname.empty()) {
+                    summary << " (" << host.hostname << ")";
+                }
+                summary << "\n           Ports: ";
+                if (host.ports.empty()) {
+                    summary << "Alive (Ping response only / No open ports)";
+                } else {
+                    bool first = true;
+                    for (const auto& p : host.ports) {
+                        if (!first) summary << ", ";
+                        summary << p;
+                        first = false;
+                    }
+                }
+                summary << "\n\n";
+
+                std::string combo_label = ip + " (" + std::to_string(host.ports.size()) + " ports)";
+                active_hosts_combo.append(ip, combo_label);
+            }
+            summary << "─────────────────────────────────────────────────────────────────────────────\n";
+            append_console_output(summary.str());
+            active_hosts_combo.set_active(0);
+        }
+
         append_console_output("\n[✓] Task finished: " + current_task_name + "\n");
         append_console_output("─────────────────────────────────────────────────────────────────────────────\n\n");
     }
@@ -1228,6 +1398,8 @@ private:
         }
 
         current_task_name = task_name;
+        live_hosts.clear();
+        current_scan_host.clear();
         is_process_running = true;
         spinner.start();
         status_badge.set_text("RUNNING");
