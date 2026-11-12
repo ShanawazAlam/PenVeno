@@ -1,0 +1,5 @@
+PenVeno
+*.o
+*.out
+*.bak
+test_*

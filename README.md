@@ -1,114 +1,124 @@
-# PenVeno: A Beginner-Friendly Penetration Testing Tool
+# PenVeno: Beginner-Friendly Penetration Testing Suite (v2.0)
 
-PenVeno is a user-friendly penetration testing tool specifically designed for cybersecurity beginners. It offers essential functions such as operating system detection, port scanning, DNS mapping, and the creation of custom payloads. Developed in C++ for high performance and utilizing GTK+ for an accessible graphical user interface, PenVeno is perfect for students and early-career professionals interested in ethical hacking and network security.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![C++](https://img.shields.io/badge/Language-C%2B%2B17-blue.svg)](https://isocpp.org/)
+[![GTK](https://img.shields.io/badge/GUI-GTKmm%203.0-brightgreen.svg)](https://www.gtkmm.org/)
 
-Features:
+**PenVeno** is a modern, fast, and beginner-friendly penetration testing toolkit designed for cybersecurity students, ethical hackers, and security researchers. Developed in **C++17** with a responsive **GTKmm 3.0** interface and dark cyber theme, PenVeno brings core penetration testing tools into a unified, non-blocking desktop suite.
 
-+ OS Detection: Identify the operating system of a target device via IP address.
+---
 
-+ Port Scanning: Scan specific ports or a range of ports on a target device.
+## 🚀 Key Features
 
-+ DNS Mapping: Map domain names to IP addresses for network analysis.
+* **🎯 Host & OS Fingerprinting**:
+  * Fast Ping Sweep (`-sn`), OS Detection & Service Fingerprinting (`-O -sV`), Aggressive Scan (`-A`), and Hop Discovery (`--traceroute`).
+  * Option to treat hosts as online (`-Pn`) and verbose output mode.
+* **🔍 Port Scanner & Service Auditor**:
+  * Multiple scan scopes: Top 100 fast ports (`-F`), Top 1000 standard ports, Full port range 1–65535 (`-p-`), Core Web & Admin services, or custom port ranges.
+  * Configurable service versioning (`-sV`), default NSE scripts (`-sC`), and aggressive timing (`-T4`).
+* **🌐 DNS & Web Reconnaissance**:
+  * Subdomain brute-force mapping via `dnsmap` (with optional custom wordlist).
+  * Comprehensive DNS record queries (`dig ANY`), WHOIS registrar/domain information, and reverse host lookups.
+* **💣 Metasploit Payload Generator (`msfvenom`)**:
+  * Cross-platform payload presets: **Windows** (x86/x64), **Linux** (x86/x64), **macOS** (x64/ARM64 Apple Silicon), **Android** (APK), **iOS**, **PHP**, **Python**, and **Bash**.
+  * **Network Interface Auto-Discovery**: Automatically enumerates local network interfaces (`eth0`, `wlan0`, `tun0` VPN) to set `LHOST` without manual IP lookups.
+  * Built-in encoding options (`x86/shikata_ga_nai`, `cmd/powershell_base64`, `x64/zutto_dekiru`) with custom iteration count and native file-save picker.
+* **🔤 Custom Wordlist Generator (`crunch`)**:
+  * Minimum/maximum word length configuration with built-in presets (Numeric, Lowercase, Uppercase, Alphanumeric, Special characters, or Custom charset).
+  * Output file selector with integrated path handling.
+* **🛡️ Hash Analyzer & Cryptographic Tools**:
+  * Instant **Hash Identifier**: Identifies hashes (MD5, SHA-1, SHA-256, SHA-512, NTLM, Bcrypt, Linux shadow hashes) with corresponding **Hashcat** mode and **John the Ripper** format references.
+  * Real-time **Cryptographic Generator**: Instant MD5, SHA-1, SHA-256, and SHA-512 calculation for any plain text.
+* **💻 Integrated Real-Time Console**:
+  * Live asynchronous output streaming directly inside the GUI — **no terminal freezing or blocking popups**.
+  * Active process management: **Stop / Abort** button to kill running scans, animated progress spinner, Copy to Clipboard, and **Export Scan Report** (.txt).
+* **🔒 Hardened Security Architecture**:
+  * Safe argument-vector execution (`execvp`) — **eliminates shell injection / command injection vulnerabilities**.
+  * Strict input sanitization and boundary validation on all fields.
 
-+ Payload Creation: Generate custom payloads for multiple operating systems (Windows, Linux, Mac, Android, iOS), with options for encryption and encoding.
+---
 
-+ Custom Wordlist: Create custom wordlists for password cracking.
+## 🛠️ Installation & Setup
 
-# Installation
-```
-git clone https://github.com/ShanawazAlam007/PenVeno.git
-
+### 1. Clone the Repository
+```bash
+git clone https://github.com/ShanawazAlam/PenVeno.git
 cd PenVeno
 ```
-# Install Dependencies:
 
-Install GTK+ on Ubuntu or Linux:
-```
+### 2. Install Dependencies (Ubuntu / Debian / Kali Linux)
+```bash
 sudo apt-get update
-```
-```
-sudo apt-get install libgtkmm-3.0-dev
+sudo apt-get install -y build-essential libgtkmm-3.0-dev libssl-dev nmap metasploit-framework crunch dnsmap whois dnsutils
 ```
 
-Install Nmap for scanning
+### 3. Compile the Program
+You can easily build PenVeno using the provided `Makefile`:
+```bash
+make
 ```
-sudo apt-get install nmap
+Or manually using `g++`:
+```bash
+g++ -std=c++17 -Wall -Wextra -O2 -o PenVeno PenVeno.c++ `pkg-config gtkmm-3.0 openssl --cflags --libs`
 ```
 
-Install msfvenom (part of Metasploit Framework)
+### 4. Run PenVeno
+```bash
+./PenVeno
 ```
-sudo apt-get install metasploit-framework
+Or via make:
+```bash
+make run
 ```
 
-Install crunch tool
-```
-sudo apt install crunch
-```
-# Compile the Program
+---
+
+## 🖥️ User Interface Overview
 
 ```
-g++ -o PenVeno PenVeno.c++ `pkg-config gtkmm-3.0 --cflags --libs`  
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 🛡️ PenVeno 2.0 | Penetration Testing Suite      [ IDLE ]  [ ⏹ Stop Process ] │
+├─────────────────┬───────────────────────────────────────────────────────────┤
+│ 🧭 NAVIGATION   │ Target Host / IP: [ 192.168.1.100       ]                 │
+│                 ├───────────────────────────────────────────────────────────┤
+│ 🎯 Host & OS    │ Discovery Profile:                                        │
+│ 🔍 Port Scanner │ [ 2. OS Detection & Version (-O -sV) ▾ ]                  │
+│ 🌐 DNS Recon    │ [x] Verbose Output (-v)    [x] Treat host as online (-Pn) │
+│ 💣 MSF Payload  │                                                           │
+│ 🔤 Wordlist     │ [  ▶  Launch Host Discovery  ]                            │
+│ 🛡️ Hash Tools   ├───────────────────────────────────────────────────────────┤
+│                 │ Live Output Terminal & Logs:                              │
+│                 │ ┌───────────────────────────────────────────────────────┐ │
+│                 │ │ [▶] Starting task: Host & OS Discovery                │ │
+│                 │ │ Starting Nmap 7.94 ( https://nmap.org )               │ │
+│                 │ │ Nmap scan report for target (192.168.1.100)           │ │
+│                 │ │ PORT   STATE SERVICE VERSION                          │ │
+│                 │ │ 22/tcp open  ssh     OpenSSH 8.9p1 Ubuntu             │ │
+│                 │ │ 80/tcp open  http    Apache httpd 2.4.52              │ │
+│                 │ │ [✓] Task finished: Host & OS Discovery                │ │
+│                 │ └───────────────────────────────────────────────────────┘ │
+│                 │ [ Clear ] [ Copy All ] [ Export Report ] [x] Auto-Scroll  │
+└─────────────────┴───────────────────────────────────────────────────────────┘
 ```
-# Requirements
 
-- Operating System: Linux
-- Memory: Minimum 1 GB RAM
-- Storage: Minimum 100 MB disk space
-- Dependencies: GTK+, nmap, dnsmap, msfvenom , crunch
+---
 
-# Usage
+## ⚠️ Disclaimer & Ethical Use
 
-PenVeno provides a graphical interface where users can select various penetration testing functionalities:
+PenVeno is developed strictly for **authorized educational, penetration testing, and security auditing purposes**. Only use this tool against systems and networks that you own or have explicit written permission to test. Unauthorized access or scanning against targets without authorization is illegal.
 
-- OS Detection: Enter a target IP and detect the OS type and version.
-- Port Scanning: Choose between single port or range scan modes for target IPs.
-- DNS Mapping: Enter a domain name or IP to retrieve DNS mapping data.
-- Payload Creation: Create custom payloads for different operating systems with selectable encryption options.
+---
 
+## 🤝 Contributing
 
-- Custom Wordlist: Generate custom wordlists for password cracking using the Crunch tool. Specify character sets, minimum and maximum word lengths, and other parameters to create tailored wordlists for your needs.
+Contributions, bug reports, and feature suggestions are welcome!
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/NewFeature`)
+3. Commit your Changes (`git commit -m "Add NewFeature"`)
+4. Push to the Branch (`git push origin feature/NewFeature`)
+5. Open a Pull Request
 
-# ScreenShots
+---
 
-- OS Detection: Interface showing IP entry and result output.
-  ![image](https://github.com/user-attachments/assets/c2ebffb0-fe2f-45ca-a079-50057f7db489)
-
-- Port Scanning: Fields for entering IP, port, or port range.
-  ![image](https://github.com/user-attachments/assets/1c9bea4e-963d-4160-87bd-11a8046c9b55)
-  - Scanning a specific port:
-     ![image](https://github.com/user-attachments/assets/bb49f3c9-0fa0-487c-9d91-cc5701d2a281)
-  - Scanning a range of port:
-     ![image](https://github.com/user-attachments/assets/dee91ae2-f51e-4868-bf68-11cd857b7c5b)
-  - Shows the open port:
-    ![image](https://github.com/user-attachments/assets/a87f27ba-ecb9-47f6-9f4e-1be01ea10530)
-- Payload Creation: Interface for setting target OS, encryption, and custom payload name.
-  ![image](https://github.com/user-attachments/assets/f84a14d7-1d10-42c5-affd-f55119bbf8ba)
-  - Entering Detail for iterative encryption:
-    ![image](https://github.com/user-attachments/assets/126731cb-f4d8-448f-a06f-8bd60264c25c)
-  - Payload successfully created:
-    ![image](https://github.com/user-attachments/assets/8c1eedcd-aaa3-4da3-bc66-2c556324d1db)
-
-- Crunch Tool: Interface for generating custom wordlists. Users can specify character sets, minimum and maximum word lengths, and other parameters to create tailored wordlists for password cracking.
-    - Selecting the Custom Wordlist option
-      
-       ![image](https://github.com/user-attachments/assets/da3fdc76-d659-43e2-900c-c8657428f752)
-    - Creating Custom Wordlist
-      
-      ![image](https://github.com/user-attachments/assets/ddbfbea4-5bd0-4ed7-8d11-4a1888747316)
-
-      - Output file:
-        ![image](https://github.com/user-attachments/assets/ad37a405-c96b-428a-b08e-ca5553d704d3)
-
-
-
-![Crunch](https://github.com/user-attachments/assets/b9a47a5f-4578-4d61-91ab-8479bea1cfb3)
-
-
-# Contributing
- We welcome contributions to enhance PenVeno! Please follow these steps:
-
-+ Fork the repository.
-+ Create a new branch (git checkout -b feature/YourFeature).
-+ Commit your changes (git commit -m "Add new feature").
-+ Push to the branch (git push origin feature/YourFeature).
-+ Open a pull request.
+## 👤 Author
+* **Shanawaz Alam** — [GitHub Profile](https://github.com/ShanawazAlam)
