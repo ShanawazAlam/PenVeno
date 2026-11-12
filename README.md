@@ -121,17 +121,23 @@ A complete web endpoint discovery, DNS enumeration, and technology fingerprintin
   <img src="docs/screenshots/02_dns_recon.png" alt="DNS and Web Reconnaissance" width="900">
 </p>
 
-### 3. 💣 Metasploit Payload Generator
-Generates custom reverse shell payloads using `msfvenom` with zero CLI hassle:
-- **Supported Platforms**:
-  - **Windows**: x86 & x64 (`windows/meterpreter/reverse_tcp` -> `.exe`)
-  - **Linux**: x86 & x64 (`linux/x64/meterpreter/reverse_tcp` -> `.elf`)
-  - **macOS**: Intel x64 & Apple Silicon ARM64 (`osx/aarch64/meterpreter_reverse_tcp` -> `.macho`)
-  - **Mobile**: Android (`android/meterpreter/reverse_tcp` -> `.apk`) & iOS (`apple_ios/aarch64/meterpreter_reverse_tcp`)
-  - **Web & Scripting**: PHP web shell, Python reverse shell, Bash reverse TCP script.
-- **Local IP Auto-Discovery**: Detects local interface IPs (`eth0`, `wlan0`, `tun0`) so you never have to manually run `ifconfig` or `ip a` again.
-- **Encoders & Iterations**: Select encoders such as `x86/shikata_ga_nai`, `cmd/powershell_base64`, or `x64/zutto_dekiru` with customizable iteration counts.
-- **Native File Chooser**: Save directly to your desired location with proper file extension auto-fill.
+### 3. 💣 Metasploit Payload & Handler Generator
+Generates custom reverse shells, encrypted Meterpreter binaries, and automated multi-handler listeners with zero CLI hassle:
+- **Comprehensive Platform & Payload Matrix**:
+  - **Windows (x64 & x86)**: Encrypted SSL/TLS Meterpreter (`reverse_https`), Stageless Standalone (`meterpreter_reverse_tcp`), Staged Meterpreter (`meterpreter/reverse_tcp`), and Clean Command Shell (`shell_reverse_tcp` -> `.exe`).
+  - **Linux (x64 & x86)**: Stageless & Staged Meterpreter, and Standard Unix Shell (`.elf`).
+  - **macOS**: Intel x64 & Apple Silicon ARM64 (`osx/aarch64/meterpreter_reverse_tcp` -> `.macho`).
+  - **Mobile**: Android APK with encrypted HTTPS or TCP Meterpreter (`.apk`).
+  - **Web & Scripting**: PHP web shell, Python reverse shell, Bash Unix shell, and PowerShell script (`.ps1`).
+- **1-Click Metasploit Handler Generator (`.rc`)**:
+  - Instantly generates a customized Metasploit resource script (`handler_<port>.rc`) matching your selected payload, LHOST, and LPORT.
+  - Automatically copies the listener launch command (`msfconsole -q -r handler_<port>.rc`) to your clipboard so you can catch incoming sessions immediately!
+- **Evasion, Encoders & Template Injection**:
+  - **Encoders**: `x86/shikata_ga_nai`, `x64/zutto_dekiru`, `x86/xor_dynamic`, `cmd/powershell_base64` with custom iteration counts.
+  - **Bad Characters Evasion**: Configure bad characters (`-b '\x00\x0a\x0d'`) to prevent payload truncation.
+  - **Template Injection (`-x`)**: Backdoor legitimate Windows binaries (e.g. `putty.exe`, `calc.exe`) while preserving normal application execution (`-k`).
+- **Network Interface Auto-Detection**: Automatically detects active IPv4 addresses across all local interfaces (`eth0`, `wlan0`, `tun0`, VPN) with 1-click refresh.
+- **Interactive Live Command Preview**: Real-time `msfvenom` CLI display with a 1-click **Copy Command** button.
 
 <p align="center">
   <img src="docs/screenshots/03_payload_generator.png" alt="Metasploit Payload Generator" width="900">

