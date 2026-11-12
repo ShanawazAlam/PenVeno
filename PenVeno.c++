@@ -207,8 +207,8 @@ private:
     Gtk::StackSidebar sidebar;
 
     // Tool Panels
-    Gtk::Box os_panel{Gtk::ORIENTATION_VERTICAL, 12};
-    Gtk::Box port_panel{Gtk::ORIENTATION_VERTICAL, 12};
+    Gtk::ScrolledWindow nmap_scroll;
+    Gtk::Box nmap_panel{Gtk::ORIENTATION_VERTICAL, 10};
     Gtk::Box dns_panel{Gtk::ORIENTATION_VERTICAL, 12};
     Gtk::Box payload_panel{Gtk::ORIENTATION_VERTICAL, 12};
     Gtk::Box wordlist_panel{Gtk::ORIENTATION_VERTICAL, 12};
@@ -226,23 +226,49 @@ private:
     Gtk::TextView console_view;
     Glib::RefPtr<Gtk::TextBuffer> console_buffer;
 
-    // --- Inputs for OS Discovery ---
-    Gtk::Entry os_target_entry;
-    Gtk::ComboBoxText os_profile_combo;
-    Gtk::CheckButton os_verbose_check{"Verbose Output (-v)"};
-    Gtk::CheckButton os_pn_check{"Treat host as online (-Pn)"};
-    Gtk::Button os_run_btn{"Launch Host Discovery"};
+    // --- Inputs for Unified Nmap Scanner ---
+    Gtk::Entry nmap_target_entry;
+    Gtk::ComboBoxText nmap_profile_combo;
+    Gtk::ComboBoxText nmap_port_scope_combo;
+    Gtk::Label nmap_port_custom_label{"Port / Top-N:"};
+    Gtk::Entry nmap_port_custom_entry;
 
-    // --- Inputs for Port Scanner ---
-    Gtk::Entry port_target_entry;
-    Gtk::ComboBoxText port_mode_combo;
-    Gtk::Entry port_custom_entry;
-    Gtk::Label port_custom_label{"Port / Range (e.g. 80,443 or 1-1000):"};
-    Gtk::CheckButton port_sv_check{"Service Version Detection (-sV)"};
-    Gtk::CheckButton port_sc_check{"Default Scripts Scan (-sC)"};
-    Gtk::CheckButton port_t4_check{"Fast Timing Template (-T4)"};
-    Gtk::CheckButton port_pn_check{"Skip Ping (-Pn)"};
-    Gtk::Button port_run_btn{"Start Port Scan"};
+    // Primary flags
+    Gtk::CheckButton nmap_sv_check{"Service Version (-sV)"};
+    Gtk::CheckButton nmap_os_check{"OS Detection (-O)"};
+    Gtk::CheckButton nmap_agg_check{"Aggressive Scan (-A)"};
+    Gtk::CheckButton nmap_sc_check{"Default Scripts (-sC)"};
+    Gtk::CheckButton nmap_vuln_check{"Vulnerability Scan (--script vuln)"};
+    Gtk::CheckButton nmap_pn_check{"Treat as Online (-Pn)"};
+    Gtk::CheckButton nmap_t4_check{"Fast Timing (-T4)"};
+    Gtk::CheckButton nmap_open_check{"Open Ports Only (--open)"};
+
+    // Expander 1: Scan Techniques & Ping
+    Gtk::ComboBoxText nmap_scan_type_combo;
+    Gtk::ComboBoxText nmap_ping_type_combo;
+    Gtk::CheckButton nmap_traceroute_check{"Traceroute (--traceroute)"};
+
+    // Expander 2: NSE Scripts & Firewall Evasion
+    Gtk::CheckButton nmap_auth_check{"Auth & Brute Force (--script auth)"};
+    Gtk::CheckButton nmap_exploit_check{"Exploit Testing (--script exploit)"};
+    Gtk::CheckButton nmap_malware_check{"Malware Checks (--script malware)"};
+    Gtk::CheckButton nmap_discovery_check{"Discovery Scripts (--script discovery)"};
+    Gtk::Entry nmap_custom_script_entry;
+    Gtk::CheckButton nmap_frag_check{"Fragment Packets (-f)"};
+    Gtk::CheckButton nmap_badsum_check{"Bad Checksum (--badsum)"};
+    Gtk::CheckButton nmap_decoy_check{"Decoy Scan (-D RND:5)"};
+    Gtk::CheckButton nmap_srcport_check{"Spoof Port 53 (--source-port 53)"};
+
+    // Expander 3: Timing, Verbosity & Diagnostics
+    Gtk::ComboBoxText nmap_timing_combo;
+    Gtk::ComboBoxText nmap_verbose_combo;
+    Gtk::CheckButton nmap_trace_check{"Packet Trace (--packet-trace)"};
+    Gtk::CheckButton nmap_reason_check{"Port State Reason (--reason)"};
+
+    // Live command preview and action
+    Gtk::Entry nmap_cmd_preview_entry;
+    Gtk::Button nmap_copy_cmd_btn{"📋 Copy Command"};
+    Gtk::Button nmap_run_btn{"▶ Launch Scan"};
 
     // --- Inputs for DNS & Web Recon ---
     Gtk::Entry dns_target_entry;
@@ -416,8 +442,7 @@ private:
         vpaned.pack1(top_panel, true, false);
 
         // Build Stack Pages
-        build_os_panel();
-        build_port_panel();
+        build_nmap_panel();
         build_dns_panel();
         build_payload_panel();
         build_wordlist_panel();
@@ -431,110 +456,407 @@ private:
         show_all_children();
     }
 
-    // --- Page 1: Host & OS Discovery ---
-    void build_os_panel() {
-        os_panel.get_style_context()->add_class("tool-page");
+    // --- Unified Nmap Master Scanner ---
+    void build_nmap_panel() {
+        nmap_panel.get_style_context()->add_class("tool-page");
 
-        Gtk::Label* header = Gtk::manage(new Gtk::Label("Target Host & OS Fingerprinting"));
+        // Top Heading
+        Gtk::Label* header = Gtk::manage(new Gtk::Label("Unified Nmap Master Scanner & Visual Flag Builder"));
         header->get_style_context()->add_class("form-header");
         header->set_xalign(0);
-        os_panel.pack_start(*header, Gtk::PACK_SHRINK);
+        nmap_panel.pack_start(*header, Gtk::PACK_SHRINK);
 
+        // Target & Quick Preset Row
         Gtk::Box* target_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
-        Gtk::Label* t_lbl = Gtk::manage(new Gtk::Label("Target IP / Hostname / Subnet:"));
+        Gtk::Label* t_lbl = Gtk::manage(new Gtk::Label("Target IP / Host / Subnet:"));
         t_lbl->set_xalign(0);
-        os_target_entry.set_placeholder_text("e.g. 192.168.1.1 or scanme.nmap.org or 192.168.1.0/24");
+        nmap_target_entry.set_placeholder_text("e.g. 192.168.1.1 or scanme.nmap.org or 192.168.1.0/24");
+        nmap_target_entry.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::update_nmap_command_preview));
+
+        Gtk::Label* p_lbl = Gtk::manage(new Gtk::Label("Preset Profile:"));
+        nmap_profile_combo.append("Custom Selection");
+        nmap_profile_combo.append("🚀 Fast Host Discovery (-sn -v)");
+        nmap_profile_combo.append("⚡ Quick Scan Top 100 (-F -T4)");
+        nmap_profile_combo.append("🔍 Standard Service Scan (-sV -sC -T4)");
+        nmap_profile_combo.append("💥 Full Port Blitz (All Ports -p-, -sV, -sC, -O, -A)");
+        nmap_profile_combo.append("🛡️ Vulnerability Audit (-sV --script vuln)");
+        nmap_profile_combo.append("🥷 Stealth SYN Scan (-sS -Pn -f -T2)");
+        nmap_profile_combo.append("🌐 Web Server Audit (-p 80,443,8080 --script http-*)");
+        nmap_profile_combo.set_active(0);
+        nmap_profile_combo.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::on_nmap_preset_changed));
+
         target_row->pack_start(*t_lbl, Gtk::PACK_SHRINK);
-        target_row->pack_start(os_target_entry, Gtk::PACK_EXPAND_WIDGET);
-        os_panel.pack_start(*target_row, Gtk::PACK_SHRINK);
+        target_row->pack_start(nmap_target_entry, Gtk::PACK_EXPAND_WIDGET);
+        target_row->pack_start(*p_lbl, Gtk::PACK_SHRINK);
+        target_row->pack_start(nmap_profile_combo, Gtk::PACK_SHRINK);
+        nmap_panel.pack_start(*target_row, Gtk::PACK_SHRINK);
 
-        Gtk::Box* mode_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
-        Gtk::Label* m_lbl = Gtk::manage(new Gtk::Label("Discovery Profile:"));
-        m_lbl->set_xalign(0);
-        os_profile_combo.append("1. Fast Ping Sweep (-sn) [Detect live hosts]");
-        os_profile_combo.append("2. OS Detection & Version (-O -sV) [Recommended]");
-        os_profile_combo.append("3. Aggressive Complete Recon (-A) [OS, scripts, traceroute]");
-        os_profile_combo.append("4. Traceroute & Hop Discovery (--traceroute -sn)");
-        os_profile_combo.set_active(1);
-        mode_row->pack_start(*m_lbl, Gtk::PACK_SHRINK);
-        mode_row->pack_start(os_profile_combo, Gtk::PACK_EXPAND_WIDGET);
-        os_panel.pack_start(*mode_row, Gtk::PACK_SHRINK);
-
-        Gtk::Box* opt_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 16));
-        opt_row->pack_start(os_verbose_check, Gtk::PACK_SHRINK);
-        opt_row->pack_start(os_pn_check, Gtk::PACK_SHRINK);
-        os_panel.pack_start(*opt_row, Gtk::PACK_SHRINK);
-
-        os_run_btn.get_style_context()->add_class("action-btn");
-        os_run_btn.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_run_os_discovery));
-        os_panel.pack_start(os_run_btn, Gtk::PACK_SHRINK);
-
-        stack.add(os_panel, "os_page", "🎯 Host & OS Discovery");
-    }
-
-    // --- Page 2: Port Scanner ---
-    void build_port_panel() {
-        port_panel.get_style_context()->add_class("tool-page");
-
-        Gtk::Label* header = Gtk::manage(new Gtk::Label("Nmap Port Scanner & Service Auditor"));
-        header->get_style_context()->add_class("form-header");
-        header->set_xalign(0);
-        port_panel.pack_start(*header, Gtk::PACK_SHRINK);
-
-        Gtk::Box* target_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
-        Gtk::Label* t_lbl = Gtk::manage(new Gtk::Label("Target IP / Host:"));
-        t_lbl->set_xalign(0);
-        port_target_entry.set_placeholder_text("e.g. 192.168.1.100 or testfire.net");
-        target_row->pack_start(*t_lbl, Gtk::PACK_SHRINK);
-        target_row->pack_start(port_target_entry, Gtk::PACK_EXPAND_WIDGET);
-        port_panel.pack_start(*target_row, Gtk::PACK_SHRINK);
-
-        Gtk::Box* mode_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
-        Gtk::Label* m_lbl = Gtk::manage(new Gtk::Label("Port Selection:"));
-        m_lbl->set_xalign(0);
-        port_mode_combo.append("Top 100 Fast Ports (-F)");
-        port_mode_combo.append("Standard Top 1000 Ports");
-        port_mode_combo.append("Full Port Range 1-65535 (-p-)");
-        port_mode_combo.append("Core Web & Admin Ports (21,22,23,25,53,80,443,445,3306,3389,8080)");
-        port_mode_combo.append("Custom Port / Range");
-        port_mode_combo.set_active(0);
-        mode_row->pack_start(*m_lbl, Gtk::PACK_SHRINK);
-        mode_row->pack_start(port_mode_combo, Gtk::PACK_EXPAND_WIDGET);
-        port_panel.pack_start(*mode_row, Gtk::PACK_SHRINK);
-
-        Gtk::Box* custom_port_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
-        port_custom_entry.set_placeholder_text("e.g. 80,443,8080 or 1-1024");
-        custom_port_row->pack_start(port_custom_label, Gtk::PACK_SHRINK);
-        custom_port_row->pack_start(port_custom_entry, Gtk::PACK_EXPAND_WIDGET);
-        port_panel.pack_start(*custom_port_row, Gtk::PACK_SHRINK);
-
-        port_custom_label.hide();
-        port_custom_entry.hide();
-
-        port_mode_combo.signal_changed().connect([this]() {
-            if (port_mode_combo.get_active_text() == "Custom Port / Range") {
-                port_custom_label.show();
-                port_custom_entry.show();
+        // Port Scope Row
+        Gtk::Box* port_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
+        Gtk::Label* ps_lbl = Gtk::manage(new Gtk::Label("Port Selection Scope:"));
+        nmap_port_scope_combo.append("Top 100 Fast Ports (-F)");
+        nmap_port_scope_combo.append("Standard Top 1000 Ports (Default)");
+        nmap_port_scope_combo.append("All Ports 1-65535 (-p-)");
+        nmap_port_scope_combo.append("Top N Ports (--top-ports)");
+        nmap_port_scope_combo.append("Core Web & Admin Ports (21,22,23,25,53,80,110,139,143,443,445,1433,3306,3389,8080)");
+        nmap_port_scope_combo.append("Custom Port / Range (-p)");
+        nmap_port_scope_combo.set_active(1);
+        nmap_port_scope_combo.signal_changed().connect([this]() {
+            std::string text = nmap_port_scope_combo.get_active_text();
+            if (text.find("Top N Ports") != std::string::npos || text.find("Custom Port / Range") != std::string::npos) {
+                nmap_port_custom_label.show();
+                nmap_port_custom_entry.show();
+                if (text.find("Top N Ports") != std::string::npos && nmap_port_custom_entry.get_text().empty()) {
+                    nmap_port_custom_entry.set_text("50");
+                }
             } else {
-                port_custom_label.hide();
-                port_custom_entry.hide();
+                nmap_port_custom_label.hide();
+                nmap_port_custom_entry.hide();
             }
+            update_nmap_command_preview();
         });
 
-        Gtk::Box* flags_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 16));
-        port_sv_check.set_active(true);
-        flags_row->pack_start(port_sv_check, Gtk::PACK_SHRINK);
-        flags_row->pack_start(port_sc_check, Gtk::PACK_SHRINK);
-        port_t4_check.set_active(true);
-        flags_row->pack_start(port_t4_check, Gtk::PACK_SHRINK);
-        flags_row->pack_start(port_pn_check, Gtk::PACK_SHRINK);
-        port_panel.pack_start(*flags_row, Gtk::PACK_SHRINK);
+        nmap_port_custom_entry.set_placeholder_text("e.g. 50 or 80,443,8000-8100");
+        nmap_port_custom_entry.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::update_nmap_command_preview));
 
-        port_run_btn.get_style_context()->add_class("action-btn");
-        port_run_btn.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_run_port_scan));
-        port_panel.pack_start(port_run_btn, Gtk::PACK_SHRINK);
+        port_row->pack_start(*ps_lbl, Gtk::PACK_SHRINK);
+        port_row->pack_start(nmap_port_scope_combo, Gtk::PACK_EXPAND_WIDGET);
+        port_row->pack_start(nmap_port_custom_label, Gtk::PACK_SHRINK);
+        port_row->pack_start(nmap_port_custom_entry, Gtk::PACK_SHRINK);
+        nmap_panel.pack_start(*port_row, Gtk::PACK_SHRINK);
 
-        stack.add(port_panel, "port_page", "🔍 Port Scanner");
+        nmap_port_custom_label.hide();
+        nmap_port_custom_entry.hide();
+
+        // Primary Common Flags Checkbox Grid
+        Gtk::Box* flags_row1 = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 12));
+        nmap_sv_check.set_active(true);
+        nmap_t4_check.set_active(true);
+
+        auto connect_flag = [this](Gtk::CheckButton& cb) {
+            cb.signal_toggled().connect(sigc::mem_fun(*this, &MainWindow::update_nmap_command_preview));
+        };
+
+        connect_flag(nmap_sv_check);
+        connect_flag(nmap_os_check);
+        connect_flag(nmap_agg_check);
+        connect_flag(nmap_sc_check);
+        connect_flag(nmap_vuln_check);
+        connect_flag(nmap_pn_check);
+        connect_flag(nmap_t4_check);
+        connect_flag(nmap_open_check);
+
+        flags_row1->pack_start(nmap_sv_check, Gtk::PACK_SHRINK);
+        flags_row1->pack_start(nmap_os_check, Gtk::PACK_SHRINK);
+        flags_row1->pack_start(nmap_agg_check, Gtk::PACK_SHRINK);
+        flags_row1->pack_start(nmap_sc_check, Gtk::PACK_SHRINK);
+        nmap_panel.pack_start(*flags_row1, Gtk::PACK_SHRINK);
+
+        Gtk::Box* flags_row2 = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 12));
+        flags_row2->pack_start(nmap_vuln_check, Gtk::PACK_SHRINK);
+        flags_row2->pack_start(nmap_pn_check, Gtk::PACK_SHRINK);
+        flags_row2->pack_start(nmap_t4_check, Gtk::PACK_SHRINK);
+        flags_row2->pack_start(nmap_open_check, Gtk::PACK_SHRINK);
+        nmap_panel.pack_start(*flags_row2, Gtk::PACK_SHRINK);
+
+        // Collapsible Expander 1: Scan Techniques & Ping
+        Gtk::Expander* exp1 = Gtk::manage(new Gtk::Expander("⚙️ Advanced Scan Techniques & Ping Probes"));
+        Gtk::Box* exp1_box = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_VERTICAL, 6));
+
+        Gtk::Box* tech_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
+        Gtk::Label* st_lbl = Gtk::manage(new Gtk::Label("Scan Type:"));
+        nmap_scan_type_combo.append("Default (TCP SYN / Connect)");
+        nmap_scan_type_combo.append("TCP SYN Stealth (-sS)");
+        nmap_scan_type_combo.append("TCP Connect (-sT)");
+        nmap_scan_type_combo.append("UDP Scan (-sU)");
+        nmap_scan_type_combo.append("Ping Sweep Only / No Port Scan (-sn)");
+        nmap_scan_type_combo.append("TCP FIN Scan (-sF)");
+        nmap_scan_type_combo.append("TCP Null Scan (-sN)");
+        nmap_scan_type_combo.append("TCP Xmas Scan (-sX)");
+        nmap_scan_type_combo.append("TCP ACK Scan (-sA)");
+        nmap_scan_type_combo.set_active(0);
+        nmap_scan_type_combo.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::update_nmap_command_preview));
+
+        Gtk::Label* pt_lbl = Gtk::manage(new Gtk::Label("Ping Probe:"));
+        nmap_ping_type_combo.append("Default Ping");
+        nmap_ping_type_combo.append("ICMP Echo Request (-PE)");
+        nmap_ping_type_combo.append("ICMP Timestamp (-PP)");
+        nmap_ping_type_combo.append("ARP Ping (-PR)");
+        nmap_ping_type_combo.set_active(0);
+        nmap_ping_type_combo.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::update_nmap_command_preview));
+
+        connect_flag(nmap_traceroute_check);
+
+        tech_row->pack_start(*st_lbl, Gtk::PACK_SHRINK);
+        tech_row->pack_start(nmap_scan_type_combo, Gtk::PACK_EXPAND_WIDGET);
+        tech_row->pack_start(*pt_lbl, Gtk::PACK_SHRINK);
+        tech_row->pack_start(nmap_ping_type_combo, Gtk::PACK_EXPAND_WIDGET);
+        tech_row->pack_start(nmap_traceroute_check, Gtk::PACK_SHRINK);
+        exp1_box->pack_start(*tech_row, Gtk::PACK_SHRINK);
+        exp1->add(*exp1_box);
+        nmap_panel.pack_start(*exp1, Gtk::PACK_SHRINK);
+
+        // Collapsible Expander 2: NSE Scripts & Firewall Evasion
+        Gtk::Expander* exp2 = Gtk::manage(new Gtk::Expander("📜 NSE Security Scripts & Firewall Evasion"));
+        Gtk::Box* exp2_box = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_VERTICAL, 6));
+
+        Gtk::Box* nse_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
+        connect_flag(nmap_auth_check);
+        connect_flag(nmap_exploit_check);
+        connect_flag(nmap_malware_check);
+        connect_flag(nmap_discovery_check);
+
+        nse_row->pack_start(nmap_auth_check, Gtk::PACK_SHRINK);
+        nse_row->pack_start(nmap_exploit_check, Gtk::PACK_SHRINK);
+        nse_row->pack_start(nmap_malware_check, Gtk::PACK_SHRINK);
+        nse_row->pack_start(nmap_discovery_check, Gtk::PACK_SHRINK);
+        exp2_box->pack_start(*nse_row, Gtk::PACK_SHRINK);
+
+        Gtk::Box* custom_script_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
+        Gtk::Label* cs_lbl = Gtk::manage(new Gtk::Label("Custom NSE Script(s):"));
+        nmap_custom_script_entry.set_placeholder_text("e.g. http-title,ssl-cert,banner");
+        nmap_custom_script_entry.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::update_nmap_command_preview));
+        custom_script_row->pack_start(*cs_lbl, Gtk::PACK_SHRINK);
+        custom_script_row->pack_start(nmap_custom_script_entry, Gtk::PACK_EXPAND_WIDGET);
+        exp2_box->pack_start(*custom_script_row, Gtk::PACK_SHRINK);
+
+        Gtk::Box* evade_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
+        connect_flag(nmap_frag_check);
+        connect_flag(nmap_badsum_check);
+        connect_flag(nmap_decoy_check);
+        connect_flag(nmap_srcport_check);
+
+        evade_row->pack_start(nmap_frag_check, Gtk::PACK_SHRINK);
+        evade_row->pack_start(nmap_badsum_check, Gtk::PACK_SHRINK);
+        evade_row->pack_start(nmap_decoy_check, Gtk::PACK_SHRINK);
+        evade_row->pack_start(nmap_srcport_check, Gtk::PACK_SHRINK);
+        exp2_box->pack_start(*evade_row, Gtk::PACK_SHRINK);
+        exp2->add(*exp2_box);
+        nmap_panel.pack_start(*exp2, Gtk::PACK_SHRINK);
+
+        // Collapsible Expander 3: Timing, Verbosity & Diagnostics
+        Gtk::Expander* exp3 = Gtk::manage(new Gtk::Expander("⏱️ Timing, Diagnostics & Output Verbosity"));
+        Gtk::Box* exp3_box = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_VERTICAL, 6));
+
+        Gtk::Box* diag_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
+        Gtk::Label* tm_lbl = Gtk::manage(new Gtk::Label("Timing:"));
+        nmap_timing_combo.append("T4 - Aggressive (Fast & Recommended)");
+        nmap_timing_combo.append("T3 - Normal (Default)");
+        nmap_timing_combo.append("T2 - Polite (Slow & Gentle)");
+        nmap_timing_combo.append("T1 - Sneaky (IDS Evasion)");
+        nmap_timing_combo.append("T0 - Paranoid (Extremely Slow)");
+        nmap_timing_combo.append("T5 - Insane (Fastest Local Network)");
+        nmap_timing_combo.set_active(0);
+        nmap_timing_combo.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::update_nmap_command_preview));
+
+        Gtk::Label* vb_lbl = Gtk::manage(new Gtk::Label("Verbosity:"));
+        nmap_verbose_combo.append("Normal Verbosity");
+        nmap_verbose_combo.append("Verbose (-v)");
+        nmap_verbose_combo.append("Very Verbose (-vv)");
+        nmap_verbose_combo.set_active(0);
+        nmap_verbose_combo.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::update_nmap_command_preview));
+
+        connect_flag(nmap_trace_check);
+        connect_flag(nmap_reason_check);
+
+        diag_row->pack_start(*tm_lbl, Gtk::PACK_SHRINK);
+        diag_row->pack_start(nmap_timing_combo, Gtk::PACK_EXPAND_WIDGET);
+        diag_row->pack_start(*vb_lbl, Gtk::PACK_SHRINK);
+        diag_row->pack_start(nmap_verbose_combo, Gtk::PACK_EXPAND_WIDGET);
+        diag_row->pack_start(nmap_trace_check, Gtk::PACK_SHRINK);
+        diag_row->pack_start(nmap_reason_check, Gtk::PACK_SHRINK);
+        exp3_box->pack_start(*diag_row, Gtk::PACK_SHRINK);
+        exp3->add(*exp3_box);
+        nmap_panel.pack_start(*exp3, Gtk::PACK_SHRINK);
+
+        // Live Command Preview & Action Bar
+        Gtk::Box* cmd_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 8));
+        Gtk::Label* cmd_lbl = Gtk::manage(new Gtk::Label("Live Command:"));
+        nmap_cmd_preview_entry.set_editable(false);
+        nmap_cmd_preview_entry.get_style_context()->add_class("console-view");
+
+        nmap_copy_cmd_btn.signal_clicked().connect([this]() {
+            auto cb = Gtk::Clipboard::get_for_display(get_display());
+            cb->set_text(nmap_cmd_preview_entry.get_text());
+            append_console_output("[✓] Command copied to clipboard: " + nmap_cmd_preview_entry.get_text() + "\n");
+        });
+
+        nmap_run_btn.get_style_context()->add_class("action-btn");
+        nmap_run_btn.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_run_nmap_scan));
+
+        cmd_row->pack_start(*cmd_lbl, Gtk::PACK_SHRINK);
+        cmd_row->pack_start(nmap_cmd_preview_entry, Gtk::PACK_EXPAND_WIDGET);
+        cmd_row->pack_start(nmap_copy_cmd_btn, Gtk::PACK_SHRINK);
+        cmd_row->pack_start(nmap_run_btn, Gtk::PACK_SHRINK);
+        nmap_panel.pack_start(*cmd_row, Gtk::PACK_SHRINK);
+
+        nmap_scroll.set_policy(Gtk::POLICY_NEVER, Gtk::POLICY_AUTOMATIC);
+        nmap_scroll.add(nmap_panel);
+
+        stack.add(nmap_scroll, "nmap_page", "🎯 Host & Port Scanner (Nmap)");
+        update_nmap_command_preview();
+    }
+
+    std::vector<std::string> build_nmap_args() {
+        std::vector<std::string> args = {"nmap"};
+        std::string target = nmap_target_entry.get_text();
+
+        // Scan technique
+        std::string st = nmap_scan_type_combo.get_active_text();
+        if (st.find("-sS") != std::string::npos) args.push_back("-sS");
+        else if (st.find("-sT") != std::string::npos) args.push_back("-sT");
+        else if (st.find("-sU") != std::string::npos) args.push_back("-sU");
+        else if (st.find("-sn") != std::string::npos) args.push_back("-sn");
+        else if (st.find("-sF") != std::string::npos) args.push_back("-sF");
+        else if (st.find("-sN") != std::string::npos) args.push_back("-sN");
+        else if (st.find("-sX") != std::string::npos) args.push_back("-sX");
+        else if (st.find("-sA") != std::string::npos) args.push_back("-sA");
+
+        // Ping Probe
+        std::string pt = nmap_ping_type_combo.get_active_text();
+        if (pt.find("-PE") != std::string::npos) args.push_back("-PE");
+        else if (pt.find("-PP") != std::string::npos) args.push_back("-PP");
+        else if (pt.find("-PR") != std::string::npos) args.push_back("-PR");
+
+        if (nmap_pn_check.get_active()) args.push_back("-Pn");
+
+        // Port Scope (only if not ping sweep)
+        if (st.find("-sn") == std::string::npos) {
+            std::string port_scope = nmap_port_scope_combo.get_active_text();
+            if (port_scope.find("-F") != std::string::npos) {
+                args.push_back("-F");
+            } else if (port_scope.find("-p-") != std::string::npos) {
+                args.push_back("-p-");
+            } else if (port_scope.find("Top N Ports") != std::string::npos) {
+                std::string n = nmap_port_custom_entry.get_text();
+                if (n.empty()) n = "50";
+                args.push_back("--top-ports");
+                args.push_back(n);
+            } else if (port_scope.find("Core Web & Admin Ports") != std::string::npos) {
+                args.push_back("-p");
+                args.push_back("21,22,23,25,53,80,110,139,143,443,445,1433,3306,3389,8080");
+            } else if (port_scope.find("Custom Port / Range") != std::string::npos) {
+                std::string c = nmap_port_custom_entry.get_text();
+                if (!c.empty()) {
+                    args.push_back("-p");
+                    args.push_back(c);
+                }
+            }
+        }
+
+        // Detection
+        if (nmap_sv_check.get_active()) args.push_back("-sV");
+        if (nmap_os_check.get_active()) args.push_back("-O");
+        if (nmap_agg_check.get_active()) args.push_back("-A");
+        if (nmap_traceroute_check.get_active()) args.push_back("--traceroute");
+
+        // Scripts
+        std::vector<std::string> scripts;
+        if (nmap_sc_check.get_active()) scripts.push_back("default");
+        if (nmap_vuln_check.get_active()) scripts.push_back("vuln");
+        if (nmap_auth_check.get_active()) scripts.push_back("auth");
+        if (nmap_exploit_check.get_active()) scripts.push_back("exploit");
+        if (nmap_malware_check.get_active()) scripts.push_back("malware");
+        if (nmap_discovery_check.get_active()) scripts.push_back("discovery");
+        std::string cs = nmap_custom_script_entry.get_text();
+        if (!cs.empty()) scripts.push_back(cs);
+
+        if (!scripts.empty()) {
+            std::string script_arg = "--script=";
+            for (size_t i = 0; i < scripts.size(); ++i) {
+                script_arg += scripts[i];
+                if (i + 1 < scripts.size()) script_arg += ",";
+            }
+            args.push_back(script_arg);
+        }
+
+        // Timing
+        std::string tm = nmap_timing_combo.get_active_text();
+        if (tm.rfind("T4", 0) == 0) args.push_back("-T4");
+        else if (tm.rfind("T3", 0) == 0) args.push_back("-T3");
+        else if (tm.rfind("T2", 0) == 0) args.push_back("-T2");
+        else if (tm.rfind("T1", 0) == 0) args.push_back("-T1");
+        else if (tm.rfind("T0", 0) == 0) args.push_back("-T0");
+        else if (tm.rfind("T5", 0) == 0) args.push_back("-T5");
+
+        // Evasion & other
+        if (nmap_frag_check.get_active()) args.push_back("-f");
+        if (nmap_badsum_check.get_active()) args.push_back("--badsum");
+        if (nmap_decoy_check.get_active()) { args.push_back("-D"); args.push_back("RND:5"); }
+        if (nmap_srcport_check.get_active()) { args.push_back("--source-port"); args.push_back("53"); }
+        if (nmap_open_check.get_active()) args.push_back("--open");
+        if (nmap_reason_check.get_active()) args.push_back("--reason");
+        if (nmap_trace_check.get_active()) args.push_back("--packet-trace");
+
+        std::string vb = nmap_verbose_combo.get_active_text();
+        if (vb.find("Very Verbose") != std::string::npos) args.push_back("-vv");
+        else if (vb.find("Verbose (-v)") != std::string::npos) args.push_back("-v");
+
+        if (!target.empty()) args.push_back(target);
+        return args;
+    }
+
+    void update_nmap_command_preview() {
+        auto args = build_nmap_args();
+        std::string full_cmd;
+        for (const auto& a : args) full_cmd += a + " ";
+        nmap_cmd_preview_entry.set_text(full_cmd);
+    }
+
+    void on_nmap_preset_changed() {
+        std::string p = nmap_profile_combo.get_active_text();
+        if (p.rfind("🚀 Fast Host Discovery", 0) == 0) {
+            nmap_scan_type_combo.set_active(4); // -sn
+            nmap_sv_check.set_active(false);
+            nmap_os_check.set_active(false);
+            nmap_agg_check.set_active(false);
+            nmap_sc_check.set_active(false);
+            nmap_vuln_check.set_active(false);
+            nmap_verbose_combo.set_active(1); // -v
+        } else if (p.rfind("⚡ Quick Scan", 0) == 0) {
+            nmap_scan_type_combo.set_active(0);
+            nmap_port_scope_combo.set_active(0); // -F
+            nmap_sv_check.set_active(false);
+            nmap_os_check.set_active(false);
+            nmap_agg_check.set_active(false);
+            nmap_sc_check.set_active(false);
+            nmap_vuln_check.set_active(false);
+            nmap_timing_combo.set_active(0); // -T4
+        } else if (p.rfind("🔍 Standard Service", 0) == 0) {
+            nmap_scan_type_combo.set_active(0);
+            nmap_port_scope_combo.set_active(1); // 1000 ports
+            nmap_sv_check.set_active(true);
+            nmap_sc_check.set_active(true);
+            nmap_os_check.set_active(false);
+            nmap_vuln_check.set_active(false);
+            nmap_timing_combo.set_active(0); // -T4
+        } else if (p.rfind("💥 Full Port Blitz", 0) == 0) {
+            nmap_scan_type_combo.set_active(0);
+            nmap_port_scope_combo.set_active(2); // -p-
+            nmap_sv_check.set_active(true);
+            nmap_sc_check.set_active(true);
+            nmap_os_check.set_active(true);
+            nmap_agg_check.set_active(true);
+            nmap_timing_combo.set_active(0); // -T4
+        } else if (p.rfind("🛡️ Vulnerability Audit", 0) == 0) {
+            nmap_scan_type_combo.set_active(0);
+            nmap_port_scope_combo.set_active(1); // 1000 ports
+            nmap_sv_check.set_active(true);
+            nmap_sc_check.set_active(false);
+            nmap_vuln_check.set_active(true);
+            nmap_timing_combo.set_active(0); // -T4
+        } else if (p.rfind("🥷 Stealth SYN Scan", 0) == 0) {
+            nmap_scan_type_combo.set_active(1); // -sS
+            nmap_pn_check.set_active(true);
+            nmap_frag_check.set_active(true);
+            nmap_timing_combo.set_active(2); // -T2
+        } else if (p.rfind("🌐 Web Server Audit", 0) == 0) {
+            nmap_port_scope_combo.set_active(5); // custom
+            nmap_port_custom_entry.set_text("80,443,8080,8443");
+            nmap_sv_check.set_active(true);
+            nmap_custom_script_entry.set_text("http-title,http-headers,http-enum");
+        }
+        update_nmap_command_preview();
     }
 
     // --- Page 3: DNS & Web Recon ---
@@ -884,8 +1206,7 @@ private:
     }
 
     void set_inputs_sensitive(bool sensitive) {
-        os_run_btn.set_sensitive(sensitive);
-        port_run_btn.set_sensitive(sensitive);
+        nmap_run_btn.set_sensitive(sensitive);
         dns_run_btn.set_sensitive(sensitive);
         payload_run_btn.set_sensitive(sensitive);
         wordlist_run_btn.set_sensitive(sensitive);
@@ -996,72 +1317,16 @@ private:
 
     // --- Action Handlers ---
 
-    void on_run_os_discovery() {
-        std::string target = os_target_entry.get_text();
+    void on_run_nmap_scan() {
+        std::string target = nmap_target_entry.get_text();
         if (!SecurityUtils::is_valid_target(target)) {
             Gtk::MessageDialog dlg(*this, "Please enter a valid target IP, hostname, or subnet.", false, Gtk::MESSAGE_ERROR);
             dlg.run();
             return;
         }
 
-        std::vector<std::string> args = {"nmap"};
-        std::string mode = os_profile_combo.get_active_text();
-
-        if (mode.rfind("1. Fast Ping", 0) == 0) {
-            args.push_back("-sn");
-        } else if (mode.rfind("2. OS Detection", 0) == 0) {
-            args.push_back("-O");
-            args.push_back("-sV");
-        } else if (mode.rfind("3. Aggressive", 0) == 0) {
-            args.push_back("-A");
-        } else if (mode.rfind("4. Traceroute", 0) == 0) {
-            args.push_back("--traceroute");
-            args.push_back("-sn");
-        }
-
-        if (os_verbose_check.get_active()) args.push_back("-v");
-        if (os_pn_check.get_active()) args.push_back("-Pn");
-
-        args.push_back(target);
-        execute_command_async("Host & OS Discovery", args);
-    }
-
-    void on_run_port_scan() {
-        std::string target = port_target_entry.get_text();
-        if (!SecurityUtils::is_valid_target(target)) {
-            Gtk::MessageDialog dlg(*this, "Please enter a valid target IP or hostname.", false, Gtk::MESSAGE_ERROR);
-            dlg.run();
-            return;
-        }
-
-        std::vector<std::string> args = {"nmap"};
-        std::string mode = port_mode_combo.get_active_text();
-
-        if (mode == "Top 100 Fast Ports (-F)") {
-            args.push_back("-F");
-        } else if (mode == "Full Port Range 1-65535 (-p-)") {
-            args.push_back("-p-");
-        } else if (mode.rfind("Core Web & Admin Ports", 0) == 0) {
-            args.push_back("-p");
-            args.push_back("21,22,23,25,53,80,110,139,143,443,445,1433,3306,3389,8080");
-        } else if (mode == "Custom Port / Range") {
-            std::string custom = port_custom_entry.get_text();
-            if (custom.empty() || !SecurityUtils::is_valid_target(custom)) {
-                Gtk::MessageDialog dlg(*this, "Please enter a valid port or range (e.g. 80,443 or 1-1000).", false, Gtk::MESSAGE_ERROR);
-                dlg.run();
-                return;
-            }
-            args.push_back("-p");
-            args.push_back(custom);
-        }
-
-        if (port_sv_check.get_active()) args.push_back("-sV");
-        if (port_sc_check.get_active()) args.push_back("-sC");
-        if (port_t4_check.get_active()) args.push_back("-T4");
-        if (port_pn_check.get_active()) args.push_back("-Pn");
-
-        args.push_back(target);
-        execute_command_async("Port Scanning", args);
+        auto args = build_nmap_args();
+        execute_command_async("Nmap Master Scan", args);
     }
 
     void on_run_dns_recon() {
@@ -1324,61 +1589,50 @@ public:
             std::cout << "[✓] Generated screenshot: " << path << " (" << w << "x" << h << ")\n";
         };
 
-        // 1. Host & OS
-        os_target_entry.set_text("192.168.1.1");
-        os_profile_combo.set_active(1);
-        os_verbose_check.set_active(true);
-        os_pn_check.set_active(true);
+        // 1. Unified Nmap Master Scanner
+        nmap_target_entry.set_text("192.168.1.100");
+        nmap_port_scope_combo.set_active(2); // All Ports (-p-)
+        nmap_sv_check.set_active(true);
+        nmap_os_check.set_active(true);
+        nmap_agg_check.set_active(true);
+        nmap_sc_check.set_active(true);
+        nmap_vuln_check.set_active(true);
+        nmap_pn_check.set_active(true);
+        nmap_t4_check.set_active(true);
+        nmap_open_check.set_active(true);
+        update_nmap_command_preview();
+
         console_buffer->set_text(
-            "[▶] Starting task: Host & OS Discovery\n"
-            "[*] Executing: nmap -O -sV -v -Pn 192.168.1.1\n\n"
-            "Starting Nmap 7.94 ( https://nmap.org ) at 2026-11-12 14:30 IST\n"
-            "Nmap scan report for gateway.home (192.168.1.1)\n"
-            "Host is up (0.0012s latency).\n"
-            "Not shown: 996 closed tcp ports (reset)\n"
-            "PORT     STATE SERVICE VERSION\n"
-            "22/tcp   open  ssh     OpenSSH 8.9p1 Ubuntu 3ubuntu0.6 (Ubuntu Linux; protocol 2.0)\n"
-            "53/tcp   open  domain  dnsmasq 2.86\n"
-            "80/tcp   open  http    nginx 1.18.0 (Ubuntu)\n"
-            "443/tcp  open  ssl/http nginx 1.18.0 (Ubuntu)\n"
+            "[▶] Starting task: Nmap Master Scan\n"
+            "[*] Executing: nmap -sV -O -A -sC -p- -T4 -Pn --open --script=default,vuln 192.168.1.100\n\n"
+            "Starting Nmap 7.94 ( https://nmap.org ) at 2026-11-12 15:30 IST\n"
+            "Nmap scan report for sec-target.corp (192.168.1.100)\n"
+            "Host is up (0.00042s latency).\n"
+            "Not shown: 65529 closed tcp ports (reset)\n\n"
+            "PORT     STATE SERVICE     VERSION\n"
+            "21/tcp   open  ftp         vsftpd 3.0.3\n"
+            "| ftp-anon: Anonymous FTP login permitted (FTP code 230)\n"
+            "22/tcp   open  ssh         OpenSSH 8.9p1 Ubuntu (protocol 2.0)\n"
+            "80/tcp   open  http        Apache httpd 2.4.52 ((Ubuntu))\n"
+            "|_http-title: Enterprise Security Gateway Portal\n"
+            "|_http-server-header: Apache/2.4.52 (Ubuntu)\n"
+            "| vulners: \n"
+            "|   cpe:/a:apache:http_server:2.4.52: \n"
+            "|     CVE-2023-25690  9.8  https://vulners.com/cve/CVE-2023-25690\n"
+            "|     CVE-2022-31813  9.8  https://vulners.com/cve/CVE-2022-31813\n"
+            "443/tcp  open  ssl/https   Apache httpd 2.4.52\n"
+            "3306/tcp open  mysql       MySQL 8.0.35-0ubuntu0.22.04.1\n"
+            "8080/tcp open  http-proxy  Apache Tomcat 9.0.58\n\n"
             "Device type: general purpose\n"
             "Running: Linux 5.X\n"
-            "OS CPE: cpe:/o:linux:linux_kernel:5\n"
             "OS details: Linux 5.4 - 5.15\n"
             "Network Distance: 1 hop\n\n"
-            "[✓] Task finished: Host & OS Discovery\n"
+            "[✓] Task finished: Nmap Master Scan\n"
             "─────────────────────────────────────────────────────────────────────────────\n"
         );
-        save_snap("os_page", "01_host_os_discovery.png");
+        save_snap("nmap_page", "01_nmap_master_scanner.png");
 
-        // 2. Port Scanner
-        port_target_entry.set_text("192.168.1.100");
-        port_mode_combo.set_active(3); // Core Web & Admin Ports
-        port_sv_check.set_active(true);
-        port_sc_check.set_active(true);
-        port_t4_check.set_active(true);
-        console_buffer->set_text(
-            "[▶] Starting task: Port Scanning\n"
-            "[*] Executing: nmap -p 21,22,23,25,53,80,110,139,143,443,445,1433,3306,3389,8080 -sV -sC -T4 192.168.1.100\n\n"
-            "Starting Nmap 7.94 ( https://nmap.org )\n"
-            "Nmap scan report for server.local (192.168.1.100)\n"
-            "Host is up (0.00045s latency).\n\n"
-            "PORT     STATE SERVICE       VERSION\n"
-            "21/tcp   open  ftp           vsftpd 3.0.3\n"
-            "| ftp-anon: Anonymous FTP login permitted (FTP code 230)\n"
-            "22/tcp   open  ssh           OpenSSH 9.0 (protocol 2.0)\n"
-            "80/tcp   open  http          Apache httpd 2.4.52 ((Ubuntu))\n"
-            "|_http-title: VulnApp Management Portal\n"
-            "|_http-server-header: Apache/2.4.52 (Ubuntu)\n"
-            "443/tcp  open  ssl/https     Apache httpd 2.4.52\n"
-            "3306/tcp open  mysql         MySQL 8.0.35-0ubuntu0.22.04.1\n"
-            "8080/tcp open  http-proxy    Tomcat/9.0.58\n\n"
-            "[✓] Task finished: Port Scanning\n"
-            "─────────────────────────────────────────────────────────────────────────────\n"
-        );
-        save_snap("port_page", "02_port_scanner.png");
-
-        // 3. DNS Recon
+        // 2. DNS Recon
         dns_target_entry.set_text("example.com");
         dns_mode_combo.set_active(0);
         console_buffer->set_text(
@@ -1396,9 +1650,9 @@ public:
             "[✓] Task finished: DNS & Web Recon\n"
             "─────────────────────────────────────────────────────────────────────────────\n"
         );
-        save_snap("dns_page", "03_dns_recon.png");
+        save_snap("dns_page", "02_dns_recon.png");
 
-        // 4. Payload Generator
+        // 3. Payload Generator
         payload_os_combo.set_active(1); // Windows x64
         payload_lport_entry.set_text("4444");
         payload_encoder_combo.set_active(1);
@@ -1420,9 +1674,9 @@ public:
             "[✓] Task finished: Metasploit Payload Generation\n"
             "─────────────────────────────────────────────────────────────────────────────\n"
         );
-        save_snap("payload_page", "04_payload_generator.png");
+        save_snap("payload_page", "03_payload_generator.png");
 
-        // 5. Custom Wordlist
+        // 4. Custom Wordlist
         wordlist_min_entry.set_text("6");
         wordlist_max_entry.set_text("8");
         wordlist_charset_combo.set_active(3); // Lowercase + Numbers
@@ -1439,9 +1693,9 @@ public:
             "[✓] Task finished: Crunch Custom Wordlist Generation\n"
             "─────────────────────────────────────────────────────────────────────────────\n"
         );
-        save_snap("wordlist_page", "05_custom_wordlist.png");
+        save_snap("wordlist_page", "04_custom_wordlist.png");
 
-        // 6. Hash Tools
+        // 5. Hash Tools
         hash_input_entry.set_text("5d41402abc4b2a76b9719d911017c592");
         hash_plain_entry.set_text("SecurityAudit2026!");
         console_buffer->set_text(
@@ -1458,7 +1712,7 @@ public:
             "[✓] Hash analysis and generation completed.\n"
             "─────────────────────────────────────────────────────────────────────────────\n"
         );
-        save_snap("hash_page", "06_hash_tools.png");
+        save_snap("hash_page", "05_hash_tools.png");
     }
 };
 

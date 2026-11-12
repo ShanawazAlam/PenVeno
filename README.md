@@ -73,32 +73,38 @@ For cybersecurity students, junior penetration testers, and CTF players, memoriz
 
 ## 🔍 Module Deep Dive
 
-### 1. 🎯 Host & OS Discovery
-Leverages Nmap's engine to perform network reconnaissance without manually configuring complex flags:
-- **Ping Sweep (`-sn`)**: Quickly maps out alive hosts on a local subnet or IP range.
-- **OS Fingerprinting & Service Detection (`-O -sV`)**: Identifies target operating systems, kernel versions, and running services.
-- **Aggressive Recon (`-A`)**: Enables OS detection, version scanning, script scanning, and traceroute in one step.
-- **Traceroute & Hop Discovery (`--traceroute -sn`)**: Maps network hops to the target.
-- **Modifiers**: Optional verbose mode (`-v`) and treat host as online (`-Pn`).
+### 1. 🎯 Host & Port Scanner (Unified Nmap Master Suite & Flag Builder)
+Merges host discovery and port scanning into a comprehensive Nmap control center with a **Visual Flag Builder**—execute virtually any Nmap capability with zero manual CLI typing:
+* **Target Scopes**: Supports single IP addresses, hostnames, and CIDR subnets (e.g. `192.168.1.0/24`).
+* **1-Click Preset Profiles**:
+  * 🚀 *Fast Host Discovery* (`-sn -v` ping sweep)
+  * ⚡ *Quick Scan Top 100* (`-F -T4`)
+  * 🔍 *Standard Service Scan* (`-sV -sC -T4`)
+  * 💥 *Full Port Blitz* (All 65,535 ports `-p-`, `-sV`, `-sC`, `-O`, `-A`)
+  * 🛡️ *Vulnerability Audit* (`-sV --script vuln` automated CVE discovery)
+  * 🥷 *Stealth SYN Scan* (`-sS -Pn -f -T2` packet fragmentation & firewall bypass)
+  * 🌐 *Web Server Audit* (`-p 80,443,8080 --script http-*`)
+* **Flexible Port Scopes**:
+  * Top 100 Fast Ports (`-F`)
+  * Standard Top 1000 Ports
+  * Full Port Range 1–65535 (`-p-`)
+  * Top N Ports (`--top-ports 20 / 50 / 100 / 500 / 2000`)
+  * Core Web & Admin Services (21, 22, 23, 25, 53, 80, 110, 139, 143, 443, 445, 1433, 3306, 3389, 8080)
+  * Custom Port Range (e.g. `80,443,8000-8100`)
+* **Visual Nmap Flag Catalog**:
+  * **Scan Techniques**: TCP SYN (`-sS`), TCP Connect (`-sT`), UDP Scan (`-sU`), Ping Sweep (`-sn`), FIN (`-sF`), Null (`-sN`), Xmas (`-sX`), ACK (`-sA`).
+  * **Discovery Probes**: ICMP Echo (`-PE`), Timestamp (`-PP`), ARP Ping (`-PR`), Treat as Online (`-Pn`), Traceroute (`--traceroute`).
+  * **Fingerprinting**: Service Version Detection (`-sV`), OS Detection (`-O`), Aggressive Recon (`-A`).
+  * **NSE Security Scripts**: Default scripts (`-sC`), Vulnerabilities (`--script vuln`), Exploits (`--script exploit`), Brute Force/Auth (`--script auth`), Malware (`--script malware`), and custom scripts.
+  * **Firewall Evasion & Spoofing**: Packet Fragmentation (`-f`), Bad Checksum (`--badsum`), Decoy IPs (`-D RND:5`), Spoofed Source Port 53 (`--source-port 53`).
+  * **Timing & Output**: Templates `T0` to `T5`, Show Open Ports Only (`--open`), Port State Reason (`--reason`), Packet Trace (`--packet-trace`), and Verbosity (`-v` / `-vv`).
+* **Interactive Live Command Preview**: Updates in real time as options are toggled, displaying the exact CLI command with a 1-click **Copy Command** button.
 
 <p align="center">
-  <img src="docs/screenshots/01_host_os_discovery.png" alt="Host and OS Discovery" width="850">
+  <img src="docs/screenshots/01_nmap_master_scanner.png" alt="Unified Nmap Master Scanner" width="900">
 </p>
 
-### 2. 🔍 Port Scanner & Service Auditor
-Audit open ports and services across customizable scopes:
-- **Top 100 Fast Ports (`-F`)**: Rapid scan for initial reconnaissance.
-- **Standard Top 1000 Ports**: Standard baseline audit.
-- **Full Port Range (`-p-` / `1-65535`)**: Comprehensive port sweep.
-- **Core Web & Admin Ports**: Scans high-value targets (FTP: 21, SSH: 22, Telnet: 23, SMTP: 25, DNS: 53, HTTP: 80, HTTPS: 443, SMB: 445, MySQL: 3306, RDP: 3389, Web Proxy: 8080).
-- **Custom Port Range**: Specify any custom list or range (e.g. `80,443,8000-8100`).
-- **Flags**: Toggle service versioning (`-sV`), default security scripts (`-sC`), and aggressive timing (`-T4`).
-
-<p align="center">
-  <img src="docs/screenshots/02_port_scanner.png" alt="Port Scanner and Service Auditor" width="850">
-</p>
-
-### 3. 🌐 DNS & Web Reconnaissance
+### 2. 🌐 DNS & Web Reconnaissance
 Enumerate subdomains and inspect DNS infrastructure:
 - **Subdomain Bruteforcing (`dnsmap`)**: Discovers hidden subdomains with built-in or custom wordlists.
 - **Comprehensive DNS Records (`dig ANY`)**: Queries all DNS record types (`A`, `AAAA`, `MX`, `TXT`, `NS`, `SOA`, `CNAME`).
@@ -106,10 +112,10 @@ Enumerate subdomains and inspect DNS infrastructure:
 - **Reverse DNS (`host -a`)**: Resolves hostnames and IP PTR records.
 
 <p align="center">
-  <img src="docs/screenshots/03_dns_recon.png" alt="DNS and Web Reconnaissance" width="850">
+  <img src="docs/screenshots/02_dns_recon.png" alt="DNS and Web Reconnaissance" width="900">
 </p>
 
-### 4. 💣 Metasploit Payload Generator
+### 3. 💣 Metasploit Payload Generator
 Generates custom reverse shell payloads using `msfvenom` with zero CLI hassle:
 - **Supported Platforms**:
   - **Windows**: x86 & x64 (`windows/meterpreter/reverse_tcp` -> `.exe`)
@@ -122,10 +128,10 @@ Generates custom reverse shell payloads using `msfvenom` with zero CLI hassle:
 - **Native File Chooser**: Save directly to your desired location with proper file extension auto-fill.
 
 <p align="center">
-  <img src="docs/screenshots/04_payload_generator.png" alt="Metasploit Payload Generator" width="850">
+  <img src="docs/screenshots/03_payload_generator.png" alt="Metasploit Payload Generator" width="900">
 </p>
 
-### 5. 🔤 Custom Wordlist Generator
+### 4. 🔤 Custom Wordlist Generator
 Harnesses the power of `crunch` to generate tailored wordlists for password cracking and fuzzing:
 - **Min / Max Length**: Configure exact password length constraints.
 - **Character Presets**:
@@ -138,10 +144,10 @@ Harnesses the power of `crunch` to generate tailored wordlists for password crac
 - **Integrated File Selector**: Browse and save output files with ease.
 
 <p align="center">
-  <img src="docs/screenshots/05_custom_wordlist.png" alt="Custom Wordlist Generator" width="850">
+  <img src="docs/screenshots/04_custom_wordlist.png" alt="Custom Wordlist Generator" width="900">
 </p>
 
-### 6. 🛡️ Hash Identifier & Crypto Tools
+### 5. 🛡️ Hash Identifier & Crypto Tools
 Instant cryptographic intelligence powered by OpenSSL:
 - **Hash Analyzer & Identifier**:
   - Automatically recognizes hash formats by structure, character set, and length.
@@ -151,7 +157,7 @@ Instant cryptographic intelligence powered by OpenSSL:
   - Computes MD5, SHA-1, SHA-256, and SHA-512 hashes for any plain text input in real time.
 
 <p align="center">
-  <img src="docs/screenshots/06_hash_tools.png" alt="Hash Identifier and Crypto Tools" width="850">
+  <img src="docs/screenshots/05_hash_tools.png" alt="Hash Identifier and Crypto Tools" width="900">
 </p>
 
 ---
@@ -162,23 +168,22 @@ Instant cryptographic intelligence powered by OpenSSL:
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ 🛡️ PenVeno 2.0 | Penetration Testing Suite      [ IDLE ]  [ ⏹ Stop Process ] │
 ├─────────────────┬───────────────────────────────────────────────────────────┤
-│ 🧭 NAVIGATION   │ Target Host / IP: [ 192.168.1.100       ]                 │
+│ 🧭 NAVIGATION   │ Target: [ 192.168.1.100       ]  Preset: [ Full Port ▾ ]  │
 │                 ├───────────────────────────────────────────────────────────┤
-│ 🎯 Host & OS    │ Discovery Profile:                                        │
-│ 🔍 Port Scanner │ [ 2. OS Detection & Version (-O -sV) ▾ ]                  │
-│ 🌐 DNS Recon    │ [x] Verbose Output (-v)    [x] Treat host as online (-Pn) │
-│ 💣 MSF Payload  │                                                           │
-│ 🔤 Wordlist     │ [  ▶  Launch Host Discovery  ]                            │
-│ 🛡️ Hash Tools   ├───────────────────────────────────────────────────────────┤
+│ 🎯 Nmap Scanner │ Port Scope: [ All Ports 1-65535 (-p-) ▾ ]                 │
+│ 🌐 DNS Recon    │ [x] -sV  [x] -O  [x] -A  [x] -sC  [x] vuln  [x] -Pn  [x]T4│
+│ 💣 MSF Payload  │ [▶ Expander: Scan Techniques] [▶ Expander: NSE & Evasion] │
+│ 🔤 Wordlist     │ Command: [ nmap -sV -O -A -sC -p- -T4 -Pn 192.168.1.100 ] │
+│ 🛡️ Hash Tools   │ [  ▶  Launch Scan  ]               [ 📋 Copy Command ]     │
+│                 ├───────────────────────────────────────────────────────────┤
 │                 │ Live Output Terminal & Logs:                              │
 │                 │ ┌───────────────────────────────────────────────────────┐ │
-│                 │ │ [▶] Starting task: Host & OS Discovery                │ │
 │                 │ │ Starting Nmap 7.94 ( https://nmap.org )               │ │
-│                 │ │ Nmap scan report for target (192.168.1.100)           │ │
+│                 │ │ Nmap scan report for sec-target.corp (192.168.1.100)  │ │
 │                 │ │ PORT   STATE SERVICE VERSION                          │ │
 │                 │ │ 22/tcp open  ssh     OpenSSH 8.9p1 Ubuntu             │ │
 │                 │ │ 80/tcp open  http    Apache httpd 2.4.52              │ │
-│                 │ │ [✓] Task finished: Host & OS Discovery                │ │
+│                 │ │ [✓] Task finished: Nmap Master Scan                   │ │
 │                 │ └───────────────────────────────────────────────────────┘ │
 │                 │ [ Clear ] [ Copy All ] [ Export Report ] [x] Auto-Scroll  │
 └─────────────────┴───────────────────────────────────────────────────────────┘
