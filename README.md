@@ -81,6 +81,10 @@ Leverages Nmap's engine to perform network reconnaissance without manually confi
 - **Traceroute & Hop Discovery (`--traceroute -sn`)**: Maps network hops to the target.
 - **Modifiers**: Optional verbose mode (`-v`) and treat host as online (`-Pn`).
 
+<p align="center">
+  <img src="docs/screenshots/01_host_os_discovery.png" alt="Host and OS Discovery" width="850">
+</p>
+
 ### 2. 🔍 Port Scanner & Service Auditor
 Audit open ports and services across customizable scopes:
 - **Top 100 Fast Ports (`-F`)**: Rapid scan for initial reconnaissance.
@@ -90,12 +94,20 @@ Audit open ports and services across customizable scopes:
 - **Custom Port Range**: Specify any custom list or range (e.g. `80,443,8000-8100`).
 - **Flags**: Toggle service versioning (`-sV`), default security scripts (`-sC`), and aggressive timing (`-T4`).
 
+<p align="center">
+  <img src="docs/screenshots/02_port_scanner.png" alt="Port Scanner and Service Auditor" width="850">
+</p>
+
 ### 3. 🌐 DNS & Web Reconnaissance
 Enumerate subdomains and inspect DNS infrastructure:
 - **Subdomain Bruteforcing (`dnsmap`)**: Discovers hidden subdomains with built-in or custom wordlists.
 - **Comprehensive DNS Records (`dig ANY`)**: Queries all DNS record types (`A`, `AAAA`, `MX`, `TXT`, `NS`, `SOA`, `CNAME`).
 - **WHOIS Information**: Retrieves domain registrar, creation/expiration dates, and name servers.
 - **Reverse DNS (`host -a`)**: Resolves hostnames and IP PTR records.
+
+<p align="center">
+  <img src="docs/screenshots/03_dns_recon.png" alt="DNS and Web Reconnaissance" width="850">
+</p>
 
 ### 4. 💣 Metasploit Payload Generator
 Generates custom reverse shell payloads using `msfvenom` with zero CLI hassle:
@@ -109,6 +121,10 @@ Generates custom reverse shell payloads using `msfvenom` with zero CLI hassle:
 - **Encoders & Iterations**: Select encoders such as `x86/shikata_ga_nai`, `cmd/powershell_base64`, or `x64/zutto_dekiru` with customizable iteration counts.
 - **Native File Chooser**: Save directly to your desired location with proper file extension auto-fill.
 
+<p align="center">
+  <img src="docs/screenshots/04_payload_generator.png" alt="Metasploit Payload Generator" width="850">
+</p>
+
 ### 5. 🔤 Custom Wordlist Generator
 Harnesses the power of `crunch` to generate tailored wordlists for password cracking and fuzzing:
 - **Min / Max Length**: Configure exact password length constraints.
@@ -121,6 +137,10 @@ Harnesses the power of `crunch` to generate tailored wordlists for password crac
   - Custom user-defined character sets.
 - **Integrated File Selector**: Browse and save output files with ease.
 
+<p align="center">
+  <img src="docs/screenshots/05_custom_wordlist.png" alt="Custom Wordlist Generator" width="850">
+</p>
+
 ### 6. 🛡️ Hash Identifier & Crypto Tools
 Instant cryptographic intelligence powered by OpenSSL:
 - **Hash Analyzer & Identifier**:
@@ -129,6 +149,10 @@ Instant cryptographic intelligence powered by OpenSSL:
   - Provides corresponding **Hashcat mode flags** (e.g. `-m 0`, `-m 1000`, `-m 1800`) and **John the Ripper format names** for immediate cracking.
 - **Instant Hash Generator**:
   - Computes MD5, SHA-1, SHA-256, and SHA-512 hashes for any plain text input in real time.
+
+<p align="center">
+  <img src="docs/screenshots/06_hash_tools.png" alt="Hash Identifier and Crypto Tools" width="850">
+</p>
 
 ---
 

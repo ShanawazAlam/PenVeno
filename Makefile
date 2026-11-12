@@ -19,6 +19,10 @@ clean:
 run: $(TARGET)
 	./$(TARGET)
 
+screenshots: $(TARGET)
+	mkdir -p docs/screenshots
+	xvfb-run -a ./$(TARGET) --generate-screenshots docs/screenshots
+
 install: $(TARGET)
 	install -d /usr/local/bin
 	install -m 755 $(TARGET) /usr/local/bin/$(TARGET)
