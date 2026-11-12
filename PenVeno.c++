@@ -33,6 +33,26 @@ namespace SecurityUtils {
         return std::regex_match(target, target_regex);
     }
 
+    // Normalize target into web URL
+    inline std::string normalize_url(const std::string& target, bool default_https = true) {
+        if (target.rfind("http://", 0) == 0 || target.rfind("https://", 0) == 0) {
+            return target;
+        }
+        return (default_https ? "https://" : "http://") + target;
+    }
+
+    // Extract bare hostname or IP (stripping protocol, port, trailing path)
+    inline std::string extract_host_domain(const std::string& target) {
+        std::string h = target;
+        if (h.rfind("http://", 0) == 0) h = h.substr(7);
+        else if (h.rfind("https://", 0) == 0) h = h.substr(8);
+        auto slash = h.find('/');
+        if (slash != std::string::npos) h = h.substr(0, slash);
+        auto colon = h.find(':');
+        if (colon != std::string::npos) h = h.substr(0, colon);
+        return h;
+    }
+
     // Validate port (1 - 65535)
     inline bool is_valid_port(int port) {
         return port >= 1 && port <= 65535;
@@ -222,6 +242,7 @@ private:
     // Tool Panels
     Gtk::ScrolledWindow nmap_scroll;
     Gtk::Box nmap_panel{Gtk::ORIENTATION_VERTICAL, 10};
+    Gtk::ScrolledWindow dns_scroll;
     Gtk::Box dns_panel{Gtk::ORIENTATION_VERTICAL, 12};
     Gtk::Box payload_panel{Gtk::ORIENTATION_VERTICAL, 12};
     Gtk::Box wordlist_panel{Gtk::ORIENTATION_VERTICAL, 12};
@@ -285,10 +306,18 @@ private:
 
     // --- Inputs for DNS & Web Recon ---
     Gtk::Entry dns_target_entry;
+    Gtk::Button dns_sync_target_btn{"🎯 Use Live Target"};
     Gtk::ComboBoxText dns_mode_combo;
+    Gtk::Box dns_web_options_box{Gtk::ORIENTATION_VERTICAL, 8};
+    Gtk::ComboBoxText dns_wordlist_preset_combo;
     Gtk::Entry dns_wordlist_entry;
-    Gtk::Button dns_wordlist_browse_btn{"Browse Wordlist"};
-    Gtk::Button dns_run_btn{"Launch DNS Recon"};
+    Gtk::Button dns_wordlist_browse_btn{"Browse..."};
+    Gtk::Entry dns_ext_entry;
+    Gtk::Entry dns_status_entry;
+    Gtk::ComboBoxText dns_threads_combo;
+    Gtk::Entry dns_cmd_preview_entry;
+    Gtk::Button dns_copy_cmd_btn{"📋 Copy Command"};
+    Gtk::Button dns_run_btn{"▶ Launch Recon Task"};
 
     // --- Inputs for Payload Generator ---
     Gtk::ComboBoxText payload_os_combo;
@@ -899,52 +928,267 @@ private:
     void build_dns_panel() {
         dns_panel.get_style_context()->add_class("tool-page");
 
-        Gtk::Label* header = Gtk::manage(new Gtk::Label("DNS Mapping, Records & Subdomain Enumeration"));
+        Gtk::Label* header = Gtk::manage(new Gtk::Label("DNS Mapping, Web Reconnaissance & Subdomain Discovery"));
         header->get_style_context()->add_class("form-header");
         header->set_xalign(0);
         dns_panel.pack_start(*header, Gtk::PACK_SHRINK);
 
+        // Target Row + Quick Sync
         Gtk::Box* target_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
-        Gtk::Label* t_lbl = Gtk::manage(new Gtk::Label("Domain Name / IP:"));
+        Gtk::Label* t_lbl = Gtk::manage(new Gtk::Label("Target Domain / URL / Host:"));
         t_lbl->set_xalign(0);
-        dns_target_entry.set_placeholder_text("e.g. example.com or target.local");
+        dns_target_entry.set_placeholder_text("e.g. example.com or https://example.com or 192.168.1.50");
+        dns_target_entry.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::update_dns_command_preview));
+
+        dns_sync_target_btn.signal_clicked().connect([this]() {
+            std::string id = active_hosts_combo.get_active_id();
+            if (id.empty()) {
+                id = nmap_target_entry.get_text();
+            }
+            if (!id.empty()) {
+                dns_target_entry.set_text(id);
+                update_dns_command_preview();
+            } else {
+                Gtk::MessageDialog dlg(*this, "No live targets discovered yet. Enter target manually or run an Nmap scan first.", false, Gtk::MESSAGE_INFO);
+                dlg.run();
+            }
+        });
+
         target_row->pack_start(*t_lbl, Gtk::PACK_SHRINK);
         target_row->pack_start(dns_target_entry, Gtk::PACK_EXPAND_WIDGET);
+        target_row->pack_start(dns_sync_target_btn, Gtk::PACK_SHRINK);
         dns_panel.pack_start(*target_row, Gtk::PACK_SHRINK);
 
+        // Mode / Technique Selection Row
         Gtk::Box* mode_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
         Gtk::Label* m_lbl = Gtk::manage(new Gtk::Label("Recon Technique:"));
         m_lbl->set_xalign(0);
-        dns_mode_combo.append("1. dnsmap (Subdomain Bruteforce Mapping)");
-        dns_mode_combo.append("2. Comprehensive DNS Records (dig ANY)");
-        dns_mode_combo.append("3. WHOIS Domain & Registrar Info");
-        dns_mode_combo.append("4. Host / Reverse DNS Lookup");
+        dns_mode_combo.append("1. 🌐 Web Fuzzing (ffuf - Fast Directory & File Bruteforce)");
+        dns_mode_combo.append("2. 🌐 Web Fuzzing (dirb - Classic Directory Scanner)");
+        dns_mode_combo.append("3. 🛡️ HTTP Security Headers & Tech Audit (curl)");
+        dns_mode_combo.append("4. 🔒 SSL/TLS Certificate SANs Subdomain Scraping (openssl)");
+        dns_mode_combo.append("5. ⚡ DNS Zone Transfer Audit (dig AXFR)");
+        dns_mode_combo.append("6. 🗺️ Subdomain Bruteforce Mapping (dnsmap)");
+        dns_mode_combo.append("7. 📜 Comprehensive DNS Records (dig ANY)");
+        dns_mode_combo.append("8. 🔗 CNAME & Subdomain Takeover Probing (dig CNAME)");
+        dns_mode_combo.append("9. 🔎 WHOIS Registrar & Network Info (whois)");
+        dns_mode_combo.append("10. 📡 Host & Reverse DNS Lookup (host -a)");
         dns_mode_combo.set_active(0);
+        dns_mode_combo.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::on_dns_mode_changed));
+
         mode_row->pack_start(*m_lbl, Gtk::PACK_SHRINK);
         mode_row->pack_start(dns_mode_combo, Gtk::PACK_EXPAND_WIDGET);
         dns_panel.pack_start(*mode_row, Gtk::PACK_SHRINK);
 
+        // Web Fuzzing & Wordlist Options Box
+        dns_web_options_box.get_style_context()->add_class("profile-card");
+        Gtk::Label* opt_lbl = Gtk::manage(new Gtk::Label("Web Fuzzing & Wordlist Configuration"));
+        opt_lbl->get_style_context()->add_class("field-label");
+        opt_lbl->set_xalign(0);
+        dns_web_options_box.pack_start(*opt_lbl, Gtk::PACK_SHRINK);
+
+        // Wordlist preset row
         Gtk::Box* wl_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
-        Gtk::Label* w_lbl = Gtk::manage(new Gtk::Label("Custom Wordlist (optional for dnsmap):"));
-        dns_wordlist_entry.set_placeholder_text("Leave blank for built-in dnsmap wordlist");
+        Gtk::Label* w_lbl = Gtk::manage(new Gtk::Label("Wordlist:"));
+        w_lbl->set_xalign(0);
+
+        dns_wordlist_preset_combo.append("Default Dirb Common (/usr/share/dirb/wordlists/common.txt)");
+        dns_wordlist_preset_combo.append("Dirb Big Wordlist (/usr/share/dirb/wordlists/big.txt)");
+        dns_wordlist_preset_combo.append("Dirb Small Quick (/usr/share/dirb/wordlists/small.txt)");
+        dns_wordlist_preset_combo.append("Dirb Apache Known Paths (/usr/share/dirb/wordlists/vulns/apache.txt)");
+        dns_wordlist_preset_combo.append("Dirb Tomcat Known Paths (/usr/share/dirb/wordlists/vulns/tomcat.txt)");
+        dns_wordlist_preset_combo.append("Custom Wordlist File...");
+        dns_wordlist_preset_combo.set_active(0);
+
+        dns_wordlist_entry.set_text("/usr/share/dirb/wordlists/common.txt");
+        dns_wordlist_entry.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::update_dns_command_preview));
+
+        dns_wordlist_preset_combo.signal_changed().connect([this]() {
+            int idx = dns_wordlist_preset_combo.get_active_row_number();
+            switch (idx) {
+                case 0: dns_wordlist_entry.set_text("/usr/share/dirb/wordlists/common.txt"); break;
+                case 1: dns_wordlist_entry.set_text("/usr/share/dirb/wordlists/big.txt"); break;
+                case 2: dns_wordlist_entry.set_text("/usr/share/dirb/wordlists/small.txt"); break;
+                case 3: dns_wordlist_entry.set_text("/usr/share/dirb/wordlists/vulns/apache.txt"); break;
+                case 4: dns_wordlist_entry.set_text("/usr/share/dirb/wordlists/vulns/tomcat.txt"); break;
+                case 5: dns_wordlist_entry.set_text(""); break;
+                default: break;
+            }
+            update_dns_command_preview();
+        });
+
         dns_wordlist_browse_btn.signal_clicked().connect([this]() {
-            Gtk::FileChooserDialog dialog(*this, "Select Wordlist", Gtk::FILE_CHOOSER_ACTION_OPEN);
+            Gtk::FileChooserDialog dialog(*this, "Select Custom Wordlist", Gtk::FILE_CHOOSER_ACTION_OPEN);
             dialog.add_button("Cancel", Gtk::RESPONSE_CANCEL);
             dialog.add_button("Select", Gtk::RESPONSE_OK);
             if (dialog.run() == Gtk::RESPONSE_OK) {
+                dns_wordlist_preset_combo.set_active(5); // Custom
                 dns_wordlist_entry.set_text(dialog.get_filename());
+                update_dns_command_preview();
             }
         });
+
         wl_row->pack_start(*w_lbl, Gtk::PACK_SHRINK);
+        wl_row->pack_start(dns_wordlist_preset_combo, Gtk::PACK_SHRINK);
         wl_row->pack_start(dns_wordlist_entry, Gtk::PACK_EXPAND_WIDGET);
         wl_row->pack_start(dns_wordlist_browse_btn, Gtk::PACK_SHRINK);
-        dns_panel.pack_start(*wl_row, Gtk::PACK_SHRINK);
+        dns_web_options_box.pack_start(*wl_row, Gtk::PACK_SHRINK);
+
+        // Extensions, Status Codes, and Threads row
+        Gtk::Box* ext_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 10));
+        Gtk::Label* ext_lbl = Gtk::manage(new Gtk::Label("File Extensions:"));
+        dns_ext_entry.set_text(".php,.html,.txt,.json,.bak,.env");
+        dns_ext_entry.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::update_dns_command_preview));
+
+        Gtk::Label* st_lbl = Gtk::manage(new Gtk::Label("Match Status Codes:"));
+        dns_status_entry.set_text("200,204,301,302,307,401,403");
+        dns_status_entry.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::update_dns_command_preview));
+
+        Gtk::Label* th_lbl = Gtk::manage(new Gtk::Label("Speed:"));
+        dns_threads_combo.append("20 Threads (Gentle)");
+        dns_threads_combo.append("40 Threads (Balanced)");
+        dns_threads_combo.append("80 Threads (High Speed)");
+        dns_threads_combo.set_active(1);
+        dns_threads_combo.signal_changed().connect(sigc::mem_fun(*this, &MainWindow::update_dns_command_preview));
+
+        ext_row->pack_start(*ext_lbl, Gtk::PACK_SHRINK);
+        ext_row->pack_start(dns_ext_entry, Gtk::PACK_EXPAND_WIDGET);
+        ext_row->pack_start(*st_lbl, Gtk::PACK_SHRINK);
+        ext_row->pack_start(dns_status_entry, Gtk::PACK_SHRINK);
+        ext_row->pack_start(*th_lbl, Gtk::PACK_SHRINK);
+        ext_row->pack_start(dns_threads_combo, Gtk::PACK_SHRINK);
+        dns_web_options_box.pack_start(*ext_row, Gtk::PACK_SHRINK);
+
+        dns_panel.pack_start(dns_web_options_box, Gtk::PACK_SHRINK);
+
+        // Live Command Preview & Action Bar
+        Gtk::Box* cmd_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 8));
+        Gtk::Label* cmd_lbl = Gtk::manage(new Gtk::Label("Live Command:"));
+        dns_cmd_preview_entry.set_editable(false);
+        dns_cmd_preview_entry.get_style_context()->add_class("console-view");
+
+        dns_copy_cmd_btn.signal_clicked().connect([this]() {
+            auto cb = Gtk::Clipboard::get_for_display(get_display());
+            cb->set_text(dns_cmd_preview_entry.get_text());
+            append_console_output("[✓] Command copied to clipboard: " + dns_cmd_preview_entry.get_text() + "\n");
+        });
 
         dns_run_btn.get_style_context()->add_class("action-btn");
         dns_run_btn.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_run_dns_recon));
-        dns_panel.pack_start(dns_run_btn, Gtk::PACK_SHRINK);
 
-        stack.add(dns_panel, "dns_page", "🌐 DNS & Web Recon");
+        cmd_row->pack_start(*cmd_lbl, Gtk::PACK_SHRINK);
+        cmd_row->pack_start(dns_cmd_preview_entry, Gtk::PACK_EXPAND_WIDGET);
+        cmd_row->pack_start(dns_copy_cmd_btn, Gtk::PACK_SHRINK);
+        cmd_row->pack_start(dns_run_btn, Gtk::PACK_SHRINK);
+        dns_panel.pack_start(*cmd_row, Gtk::PACK_SHRINK);
+
+        update_dns_command_preview();
+
+        dns_scroll.set_policy(Gtk::POLICY_NEVER, Gtk::POLICY_AUTOMATIC);
+        dns_scroll.add(dns_panel);
+        stack.add(dns_scroll, "dns_page", "🌐 DNS & Web Recon");
+    }
+
+    void on_dns_mode_changed() {
+        std::string mode = dns_mode_combo.get_active_text();
+        bool is_web = (mode.find("Web Fuzzing") != std::string::npos);
+        bool is_dnsmap = (mode.find("dnsmap") != std::string::npos);
+        dns_web_options_box.set_sensitive(is_web || is_dnsmap);
+        update_dns_command_preview();
+    }
+
+    std::vector<std::string> build_dns_args() {
+        std::string raw_target = dns_target_entry.get_text();
+        if (raw_target.empty()) raw_target = "example.com";
+
+        std::string mode = dns_mode_combo.get_active_text();
+        std::string host = SecurityUtils::extract_host_domain(raw_target);
+        std::string web_url = SecurityUtils::normalize_url(raw_target);
+
+        std::string wl = dns_wordlist_entry.get_text();
+        if (wl.empty()) {
+            wl = "/usr/share/dirb/wordlists/common.txt";
+        }
+        std::string exts = dns_ext_entry.get_text();
+        std::string status_codes = dns_status_entry.get_text();
+        if (status_codes.empty()) status_codes = "200,204,301,302,307,401,403";
+
+        std::string threads = "40";
+        std::string th_choice = dns_threads_combo.get_active_text();
+        if (th_choice.find("20") != std::string::npos) threads = "20";
+        else if (th_choice.find("80") != std::string::npos) threads = "80";
+
+        std::vector<std::string> args;
+
+        if (mode.find("ffuf") != std::string::npos) {
+            std::string fuzz_url = web_url;
+            if (fuzz_url.back() != '/') fuzz_url += "/";
+            fuzz_url += "FUZZ";
+
+            args = {"ffuf", "-u", fuzz_url, "-w", wl, "-mc", status_codes, "-t", threads, "-c", "-v"};
+            if (!exts.empty()) {
+                args.push_back("-e");
+                args.push_back(exts);
+            }
+        } else if (mode.find("dirb") != std::string::npos) {
+            args = {"dirb", web_url, wl};
+            if (!exts.empty()) {
+                args.push_back("-X");
+                args.push_back(exts);
+            }
+        } else if (mode.find("curl") != std::string::npos) {
+            args = {"curl", "-ILsk", "--max-time", "15", web_url};
+        } else if (mode.find("openssl") != std::string::npos) {
+            std::string script = "echo '=== Querying SSL Certificate SANs for '$1' ==='; "
+                                 "openssl s_client -connect \"$1:443\" -servername \"$1\" </dev/null 2>/dev/null | "
+                                 "openssl x509 -noout -text | grep -A 2 -E 'Subject Alternative Name' | "
+                                 "tr ',' '\\n' | grep 'DNS:' | sed 's/^[ \\t]*DNS://g' | sort -u";
+            args = {"/bin/bash", "-c", script, "bash", host};
+        } else if (mode.find("Zone Transfer") != std::string::npos) {
+            std::string script = "echo '=== Testing DNS Zone Transfer (AXFR) for '$1' ==='; "
+                                 "for ns in $(dig +short NS \"$1\"); do "
+                                 "echo '[*] Testing nameserver: '$ns; "
+                                 "dig +nocmd +noall +answer AXFR \"@$ns\" \"$1\"; "
+                                 "done";
+            args = {"/bin/bash", "-c", script, "bash", host};
+        } else if (mode.find("dnsmap") != std::string::npos) {
+            args = {"dnsmap", host};
+            if (!dns_wordlist_entry.get_text().empty()) {
+                args.push_back("-w");
+                args.push_back(dns_wordlist_entry.get_text());
+            }
+        } else if (mode.find("Comprehensive DNS Records") != std::string::npos) {
+            args = {"dig", "+nocmd", host, "ANY", "+multiline", "+noall", "+answer"};
+        } else if (mode.find("CNAME") != std::string::npos) {
+            args = {"dig", "+nocmd", host, "CNAME", "+multiline", "+noall", "+answer"};
+        } else if (mode.find("whois") != std::string::npos) {
+            args = {"whois", host};
+        } else if (mode.find("host -a") != std::string::npos) {
+            args = {"host", "-a", host};
+        } else {
+            args = {"dig", "+nocmd", host, "ANY"};
+        }
+
+        return args;
+    }
+
+    void update_dns_command_preview() {
+        auto args = build_dns_args();
+        std::string full_cmd;
+        if (args.size() >= 3 && args[0] == "/bin/bash" && args[1] == "-c") {
+            std::string target = args.size() > 4 ? args[4] : "";
+            std::string mode = dns_mode_combo.get_active_text();
+            if (mode.find("openssl") != std::string::npos) {
+                full_cmd = "openssl s_client -connect " + target + ":443 -servername " + target + " | openssl x509 -noout -text (SANs extract)";
+            } else if (mode.find("Zone Transfer") != std::string::npos) {
+                full_cmd = "for ns in $(dig +short NS " + target + "); do dig AXFR @$ns " + target + "; done";
+            } else {
+                full_cmd = args[2] + " " + target;
+            }
+        } else {
+            for (const auto& a : args) full_cmd += a + " ";
+        }
+        dns_cmd_preview_entry.set_text(full_cmd);
     }
 
     // --- Page 4: Payload Generator (MSFVenom) ---
@@ -1508,29 +1752,12 @@ private:
     void on_run_dns_recon() {
         std::string target = dns_target_entry.get_text();
         if (!SecurityUtils::is_valid_target(target)) {
-            Gtk::MessageDialog dlg(*this, "Please enter a valid domain or IP address.", false, Gtk::MESSAGE_ERROR);
+            Gtk::MessageDialog dlg(*this, "Please enter a valid domain, IP address, or URL.", false, Gtk::MESSAGE_ERROR);
             dlg.run();
             return;
         }
 
-        std::string mode = dns_mode_combo.get_active_text();
-        std::vector<std::string> args;
-
-        if (mode.rfind("1. dnsmap", 0) == 0) {
-            args = {"dnsmap", target};
-            std::string wl = dns_wordlist_entry.get_text();
-            if (!wl.empty()) {
-                args.push_back("-w");
-                args.push_back(wl);
-            }
-        } else if (mode.rfind("2. Comprehensive DNS Records", 0) == 0) {
-            args = {"dig", "+nocmd", target, "ANY", "+multiline", "+noall", "+answer"};
-        } else if (mode.rfind("3. WHOIS", 0) == 0) {
-            args = {"whois", target};
-        } else if (mode.rfind("4. Host", 0) == 0) {
-            args = {"host", "-a", target};
-        }
-
+        auto args = build_dns_args();
         execute_command_async("DNS & Web Recon", args);
     }
 
@@ -1808,21 +2035,39 @@ public:
         );
         save_snap("nmap_page", "01_nmap_master_scanner.png");
 
-        // 2. DNS Recon
-        dns_target_entry.set_text("example.com");
-        dns_mode_combo.set_active(0);
+        // 2. DNS & Web Recon
+        dns_target_entry.set_text("https://example.com");
+        dns_mode_combo.set_active(0); // ffuf
+        dns_wordlist_preset_combo.set_active(0);
+        dns_wordlist_entry.set_text("/usr/share/dirb/wordlists/common.txt");
+        dns_ext_entry.set_text(".php,.html,.txt,.json,.bak,.env");
+        dns_status_entry.set_text("200,204,301,302,307,401,403");
+        dns_threads_combo.set_active(1); // 40 Threads
+        update_dns_command_preview();
+
         console_buffer->set_text(
             "[▶] Starting task: DNS & Web Recon\n"
-            "[*] Executing: dnsmap example.com\n\n"
-            "dnsmap 0.35 - DNS Network Mapper by pagvac\n\n"
-            "[+] Searching subdomains for: example.com\n"
-            "[+] Found: api.example.com -> 93.184.216.34\n"
-            "[+] Found: dev.example.com -> 93.184.216.35\n"
-            "[+] Found: mail.example.com -> 93.184.216.36\n"
-            "[+] Found: portal.example.com -> 93.184.216.37\n"
-            "[+] Found: vpn.example.com -> 93.184.216.38\n"
-            "[+] Found: admin.example.com -> 93.184.216.39\n\n"
-            "[#] 6 subdomains found in 4.2 seconds.\n\n"
+            "[*] Executing: ffuf -u https://example.com/FUZZ -w /usr/share/dirb/wordlists/common.txt -mc 200,204,301,302,307,401,403 -t 40 -c -v -e .php,.html,.txt,.json,.bak,.env\n\n"
+            ":: Method           : GET\n"
+            ":: URL              : https://example.com/FUZZ\n"
+            ":: Wordlist         : /usr/share/dirb/wordlists/common.txt\n"
+            ":: Extensions       : .php, .html, .txt, .json, .bak, .env\n"
+            ":: Matcher          : Status 200,204,301,302,307,401,403\n"
+            ":: Threads          : 40\n"
+            "________________________________________________\n\n"
+            "[Status: 200, Size: 1420, Words: 310, Lines: 45, Duration: 38ms]\n"
+            "    * FUZZ: admin -> https://example.com/admin\n\n"
+            "[Status: 301, Size: 182, Words: 21, Lines: 10, Duration: 42ms]\n"
+            "    * FUZZ: api -> https://example.com/api (Redirect -> /api/v1/)\n\n"
+            "[Status: 200, Size: 9140, Words: 1250, Lines: 190, Duration: 55ms]\n"
+            "    * FUZZ: login.php -> https://example.com/login.php\n\n"
+            "[Status: 403, Size: 284, Words: 25, Lines: 12, Duration: 36ms]\n"
+            "    * FUZZ: .env -> https://example.com/.env [RESTRICTED]\n\n"
+            "[Status: 200, Size: 412, Words: 62, Lines: 18, Duration: 40ms]\n"
+            "    * FUZZ: robots.txt -> https://example.com/robots.txt\n\n"
+            "[Status: 200, Size: 618, Words: 98, Lines: 24, Duration: 44ms]\n"
+            "    * FUZZ: sitemap.xml -> https://example.com/sitemap.xml\n\n"
+            ":: Progress: [4614/4614] :: Job [1/1] :: 680 req/sec :: Duration: [0:00:07] :: Errors: 0 ::\n\n"
             "[✓] Task finished: DNS & Web Recon\n"
             "─────────────────────────────────────────────────────────────────────────────\n"
         );

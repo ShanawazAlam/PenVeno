@@ -12,7 +12,7 @@
 [![OpenSSL](https://img.shields.io/badge/Crypto-OpenSSL%203.x-red?style=for-the-badge&logo=openssl)](https://www.openssl.org/)
 
 <p align="center">
-  <b>PenVeno</b> bridges the gap between raw command-line tools and complex enterprise suites. It unifies essential security tools—<b>Nmap, Metasploit (msfvenom), Crunch, dnsmap, dig, whois, and OpenSSL</b>—into a fast, responsive, and secure desktop GUI built for Linux.
+  <b>PenVeno</b> bridges the gap between raw command-line tools and complex enterprise suites. It unifies essential security tools—<b>Nmap, ffuf, dirb, Metasploit (msfvenom), Crunch, dnsmap, dig, whois, and OpenSSL</b>—into a fast, responsive, and secure desktop GUI built for Linux.
 </p>
 
 </div>
@@ -105,11 +105,17 @@ Merges host discovery and port scanning into a comprehensive Nmap control center
 </p>
 
 ### 2. 🌐 DNS & Web Reconnaissance
-Enumerate subdomains and inspect DNS infrastructure:
-- **Subdomain Bruteforcing (`dnsmap`)**: Discovers hidden subdomains with built-in or custom wordlists.
-- **Comprehensive DNS Records (`dig ANY`)**: Queries all DNS record types (`A`, `AAAA`, `MX`, `TXT`, `NS`, `SOA`, `CNAME`).
-- **WHOIS Information**: Retrieves domain registrar, creation/expiration dates, and name servers.
-- **Reverse DNS (`host -a`)**: Resolves hostnames and IP PTR records.
+A complete web endpoint discovery, DNS enumeration, and technology fingerprinting suite:
+* **Web Directory & Endpoint Fuzzing (`ffuf`)**: Ultra-fast Go-based fuzzing with wordlist presets (`common.txt`, `big.txt`, `vulns/apache.txt`), customizable file extensions (`.php,.html,.txt,.json,.bak,.env`), status code matching (`200, 204, 301, 302, 307, 401, 403`), and concurrency control (20 to 80 threads).
+* **Classic Directory Scanner (`dirb`)**: Standard web content scanner for comprehensive path discovery.
+* **HTTP Security Headers & Banner Audit (`curl`)**: Fast analysis of HTTP response headers to identify missing security controls (`CSP`, `HSTS`, `X-Frame-Options`, `CORS`, `Set-Cookie` flags).
+* **Passive SSL/TLS SANs Scraping (`openssl`)**: Extracts Subject Alternative Names (SANs) from SSL/TLS certificates to passively map staging, internal, and API subdomains without generating DNS brute-force noise.
+* **DNS Zone Transfer Misconfiguration (`dig AXFR`)**: Automated query against all authoritative nameservers for full DNS namespace leaks.
+* **Subdomain Takeover & CNAME Probing (`dig CNAME`)**: Checks for dangling DNS pointers to orphan cloud instances.
+* **Active Subdomain Bruteforcing (`dnsmap`)**: Wordlist-driven subdomain brute-forcing.
+* **DNS Infrastructure Records (`dig ANY`)** & **WHOIS** & **Reverse DNS (`host -a`)**.
+* **1-Click Live Target Auto-Sync**: Copies live hosts identified in Nmap directly into the Web Recon module.
+* **Interactive Live Command Preview**: Shows the exact CLI command being executed with a 1-click **Copy Command** button.
 
 <p align="center">
   <img src="docs/screenshots/02_dns_recon.png" alt="DNS and Web Reconnaissance" width="900">
