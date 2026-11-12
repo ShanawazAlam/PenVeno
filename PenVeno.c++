@@ -792,6 +792,10 @@ private:
         if (vb.find("Very Verbose") != std::string::npos) args.push_back("-vv");
         else if (vb.find("Verbose (-v)") != std::string::npos) args.push_back("-v");
 
+        // Real-time progress updates so UI never appears stalled
+        args.push_back("--stats-every");
+        args.push_back("3s");
+
         if (!target.empty()) args.push_back(target);
         return args;
     }
